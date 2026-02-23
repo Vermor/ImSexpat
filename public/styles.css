@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   --bg: #f5efe4;
   --paper: #fffaf2;
   --ink: #1e1e1e;
@@ -8,6 +8,7 @@
   --sand: #e5d2b8;
   --line: #d8c4a9;
   --danger: #b10020;
+  --ok: #0f7b3d;
 }
 
 * {
@@ -60,14 +61,6 @@ main {
   padding: 2.3rem;
   box-shadow: 0 16px 40px rgba(66, 44, 14, 0.09);
   animation: rise 0.8s ease-out;
-}
-
-.label {
-  margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--accent-dark);
-  font-size: 0.8rem;
 }
 
 h1 {
@@ -136,33 +129,23 @@ h1 {
 }
 
 .card p {
-  margin: 0;
+  margin: 0 0 0.5rem;
   color: var(--muted);
 }
 
-.newsletter {
-  margin-top: 1rem;
-  background: rgba(0, 121, 107, 0.12);
-  border: 1px solid #8fcbc3;
-  border-radius: 16px;
-  padding: 1.1rem;
-}
-
-.newsletter h2 {
-  margin-top: 0;
-}
-
-.newsletter-form {
-  display: flex;
-  gap: 0.7rem;
-  flex-wrap: wrap;
-}
-
-input {
+input,
+textarea {
+  width: 100%;
   border: 1px solid #b9b9b9;
   border-radius: 12px;
   padding: 0.7rem 0.9rem;
   font-size: 1rem;
+  font-family: inherit;
+  background: #fff;
+}
+
+textarea {
+  resize: vertical;
 }
 
 .site-footer {
@@ -185,11 +168,15 @@ input {
 
 .auth-card,
 .admin-panel {
-  width: min(520px, 100%);
+  width: min(760px, 100%);
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 1.1rem;
+}
+
+.admin-panel-wide {
+  width: min(860px, 100%);
 }
 
 .auth-form {
@@ -198,9 +185,43 @@ input {
   margin: 1rem 0;
 }
 
+.editor-form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.field span {
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.editor-actions {
+  margin-top: 0.4rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
 .error {
   color: var(--danger);
   margin-bottom: 0.4rem;
+}
+
+.success {
+  color: var(--ok);
+  font-weight: 700;
 }
 
 .admin-main {
@@ -226,7 +247,8 @@ input {
 
 @media (max-width: 760px) {
   .grid,
-  .admin-grid {
+  .admin-grid,
+  .field-row {
     grid-template-columns: 1fr;
   }
 

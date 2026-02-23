@@ -1,0 +1,149 @@
+﻿<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Landing | ImSexpat</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="admin-body">
+    <header class="site-header">
+      <div class="brand">IMSEXPAT ADMIN</div>
+      <form method="post" action="/admin/logout">
+        <button class="btn btn-ghost" type="submit">Se deconnecter</button>
+      </form>
+    </header>
+
+    <main class="admin-main">
+      <section class="admin-panel admin-panel-wide">
+        <h1>Edition de la landing</h1>
+        <p>Tout le contenu de la landing est modifiable ici.</p>
+        <p id="saveStatus" class="success" hidden>Modifications enregistrees.</p>
+
+        <form id="landingForm" class="editor-form">
+          <label class="field">
+            <span>Nom de marque</span>
+            <input name="siteName" type="text" required />
+          </label>
+
+          <label class="field">
+            <span>Titre de page (SEO)</span>
+            <input name="pageTitle" type="text" required />
+          </label>
+
+          <label class="field">
+            <span>Description meta (SEO)</span>
+            <textarea name="metaDescription" rows="2" required></textarea>
+          </label>
+
+          <label class="field">
+            <span>Titre principal</span>
+            <input name="heroTitle" type="text" required />
+          </label>
+
+          <label class="field">
+            <span>Sous-titre principal</span>
+            <textarea name="heroSubtitle" rows="2" required></textarea>
+          </label>
+
+          <div class="field-row">
+            <label class="field">
+              <span>Texte bouton hero</span>
+              <input name="ctaText" type="text" required />
+            </label>
+            <label class="field">
+              <span>Lien bouton hero</span>
+              <input name="ctaHref" type="text" required />
+            </label>
+          </div>
+
+          <h2>Carte 1</h2>
+          <label class="field">
+            <span>Titre carte 1</span>
+            <input name="card1Title" type="text" required />
+          </label>
+          <label class="field">
+            <span>Texte carte 1</span>
+            <textarea name="card1Text" rows="2" required></textarea>
+          </label>
+
+          <h2>Carte 2</h2>
+          <label class="field">
+            <span>Titre carte 2</span>
+            <input name="card2Title" type="text" required />
+          </label>
+          <label class="field">
+            <span>Texte carte 2</span>
+            <textarea name="card2Text" rows="2" required></textarea>
+          </label>
+
+          <h2>Carte 3</h2>
+          <label class="field">
+            <span>Titre carte 3</span>
+            <input name="card3Title" type="text" required />
+          </label>
+          <label class="field">
+            <span>Texte carte 3</span>
+            <textarea name="card3Text" rows="2" required></textarea>
+          </label>
+
+          <label class="field">
+            <span>Footer</span>
+            <input name="footerText" type="text" required />
+          </label>
+
+          <div class="editor-actions">
+            <a href="/admin" class="btn btn-ghost">Retour admin</a>
+            <button class="btn btn-primary" type="submit">Enregistrer</button>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <script>
+      const form = document.getElementById('landingForm');
+      const statusEl = document.getElementById('saveStatus');
+
+      const fillForm = (data) => {
+        Object.keys(data).forEach((key) => {
+          if (!form.elements[key]) return;
+          form.elements[key].value = data[key] || '';
+        });
+      };
+
+      const loadData = async () => {
+        const response = await fetch('/api/admin/landing', { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error('Impossible de charger la landing');
+        }
+        const data = await response.json();
+        fillForm(data);
+      };
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+
+        const payload = Object.fromEntries(new FormData(form).entries());
+        const response = await fetch('/api/admin/landing', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          alert('Erreur lors de la sauvegarde.');
+          return;
+        }
+
+        statusEl.hidden = false;
+        setTimeout(() => {
+          statusEl.hidden = true;
+        }, 1800);
+      });
+
+      loadData().catch((error) => {
+        alert(error.message);
+      });
+    </script>
+  </body>
+</html>

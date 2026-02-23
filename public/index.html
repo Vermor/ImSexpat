@@ -3,61 +3,99 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ImSexpat | Blog Thailande</title>
-    <meta name="description" content="ImSexpat partage des guides, bons plans et retours d'experience pour vivre et voyager en Thailande." />
+    <title>ImSexpat</title>
+    <meta name="description" content="ImSexpat" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <header class="site-header">
-      <div class="brand">ImSexpat</div>
+      <div class="brand" id="brand">ImSexpat</div>
       <a class="admin-link" href="/admin/login">Admin</a>
     </header>
 
     <main>
       <section class="hero">
-        <p class="label">Blog Thailande</p>
-        <h1>Vivre, bosser et explorer la Thailande sans filtre.</h1>
-        <p class="subtitle">
-          Des guides terrain pour les expats francophones: visas, quartiers, budget,
-          coworking, spots caches et vie locale.
-        </p>
+        <h1 id="heroTitle">Journal d'un sexpat</h1>
+        <p class="subtitle" id="heroSubtitle">recit, informations, news sur la vie d'un sexpat</p>
         <div class="hero-actions">
-          <a href="#newsletter" class="btn btn-primary">Rejoindre la newsletter</a>
-          <a href="#articles" class="btn btn-ghost">Voir les themes</a>
+          <a id="heroCta" href="#articles" class="btn btn-ghost">Voir les themes</a>
         </div>
       </section>
 
       <section id="articles" class="grid">
         <article class="card">
-          <h2>Installation expat</h2>
-          <p>Checklist arrivee, visa, assurance, banque et appart a Bangkok ou Chiang Mai.</p>
+          <h2 id="card1Title">Installation expat</h2>
+          <p id="card1Text">Checklist arrivee, visa, assurance, banque et appart a Bangkok ou Chiang Mai.</p>
         </article>
         <article class="card">
-          <h2>Vie quotidienne</h2>
-          <p>Transports, sante, courses, quartiers et habitudes culturelles a connaitre.</p>
+          <h2 id="card2Title">Vie quotidienne</h2>
+          <p id="card2Text">Transports, sante, courses, quartiers et habitudes culturelles a connaitre.</p>
         </article>
         <article class="card">
-          <h2>Week-ends & iles</h2>
-          <p>Itineraires realistes depuis les grandes villes vers les meilleures escapades.</p>
+          <h2 id="card3Title">Week-ends & iles</h2>
+          <p id="card3Text">Itineraires realistes depuis les grandes villes vers les meilleures escapades.</p>
         </article>
-      </section>
-
-      <section id="newsletter" class="newsletter">
-        <h2>Recevoir les prochains articles</h2>
-        <p>Un email utile par semaine. Pas de spam.</p>
-        <form class="newsletter-form" onsubmit="event.preventDefault(); this.reset(); alert('Merci, tu es inscrit.');">
-          <input type="email" placeholder="ton@email.com" required />
-          <button type="submit" class="btn btn-primary">S'inscrire</button>
-        </form>
       </section>
     </main>
 
     <footer class="site-footer">
-      <p>© <span id="year"></span> ImSexpat</p>
+      <p>© <span id="year"></span> <span id="footerText">ImSexpat</span></p>
     </footer>
 
     <script>
+      const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el && typeof value === 'string') {
+          el.textContent = value;
+        }
+      };
+
+      const setMetaDescription = (value) => {
+        const meta = document.querySelector('meta[name="description"]');
+        if (meta && value) {
+          meta.setAttribute('content', value);
+        }
+      };
+
+      const applyLandingContent = (content) => {
+        if (!content || typeof content !== 'object') return;
+
+        if (content.pageTitle) {
+          document.title = content.pageTitle;
+        }
+
+        setMetaDescription(content.metaDescription);
+        setText('brand', content.siteName);
+        setText('heroTitle', content.heroTitle);
+        setText('heroSubtitle', content.heroSubtitle);
+        setText('card1Title', content.card1Title);
+        setText('card1Text', content.card1Text);
+        setText('card2Title', content.card2Title);
+        setText('card2Text', content.card2Text);
+        setText('card3Title', content.card3Title);
+        setText('card3Text', content.card3Text);
+        setText('footerText', content.footerText || content.siteName);
+
+        const cta = document.getElementById('heroCta');
+        if (cta && content.ctaText) {
+          cta.textContent = content.ctaText;
+          cta.href = content.ctaHref || '#articles';
+        }
+      };
+
+      const loadLandingContent = async () => {
+        try {
+          const response = await fetch('/api/landing', { cache: 'no-store' });
+          if (!response.ok) return;
+          const content = await response.json();
+          applyLandingContent(content);
+        } catch (error) {
+          console.error('Landing content load failed:', error);
+        }
+      };
+
       document.getElementById('year').textContent = new Date().getFullYear();
+      loadLandingContent();
     </script>
   </body>
 </html>
