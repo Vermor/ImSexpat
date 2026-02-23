@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin | ImSexpat</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="admin-body">
+    <header class="site-header">
+      <div class="brand">ImSexpat Admin</div>
+      <form method="post" action="/admin/logout">
+        <button class="btn btn-ghost" type="submit">Se déconnecter</button>
+      </form>
+    </header>
+
+    <main class="admin-main">
+      <section class="admin-panel">
+        <h1>Tableau de bord admin</h1>
+        <p>Page protégée par mot de passe via cookie signé.</p>
+        <div class="admin-grid">
+          <article class="card">
+            <h2>À faire</h2>
+            <p>Brancher ici ta gestion d'articles (Markdown, CMS ou base de données).</p>
+          </article>
+          <article class="card">
+            <h2>Statut</h2>
+            <p>Déploiement Railway prêt. Variables d'env configurables depuis le dashboard.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

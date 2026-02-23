@@ -1,0 +1,236 @@
+:root {
+  --bg: #f5efe4;
+  --paper: #fffaf2;
+  --ink: #1e1e1e;
+  --muted: #515151;
+  --accent: #00796b;
+  --accent-dark: #005d52;
+  --sand: #e5d2b8;
+  --line: #d8c4a9;
+  --danger: #b10020;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 20% 20%, #ffe3ad 0, transparent 34%),
+    radial-gradient(circle at 80% 0, #b4d8d2 0, transparent 30%),
+    var(--bg);
+  min-height: 100vh;
+}
+
+.site-header {
+  max-width: 1050px;
+  margin: 0 auto;
+  padding: 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.brand {
+  font-size: 1.2rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.admin-link,
+.back-link {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+main {
+  max-width: 1050px;
+  margin: 0 auto;
+  padding: 1rem 1.25rem 3rem;
+}
+
+.hero {
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.75), rgba(255, 240, 209, 0.8));
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  padding: 2.3rem;
+  box-shadow: 0 16px 40px rgba(66, 44, 14, 0.09);
+  animation: rise 0.8s ease-out;
+}
+
+.label {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent-dark);
+  font-size: 0.8rem;
+}
+
+h1 {
+  margin: 0.5rem 0 1rem;
+  font-size: clamp(2rem, 5vw, 3rem);
+  line-height: 1.15;
+}
+
+.subtitle {
+  margin: 0;
+  max-width: 720px;
+  color: var(--muted);
+}
+
+.hero-actions {
+  margin-top: 1.4rem;
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.btn {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.65rem 1.1rem;
+  font-weight: 700;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.btn-primary {
+  color: #fff;
+  background: var(--accent);
+}
+
+.btn-primary:hover {
+  background: var(--accent-dark);
+}
+
+.btn-ghost {
+  color: var(--ink);
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.grid {
+  margin-top: 1.2rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1rem;
+}
+
+.card h2 {
+  margin-top: 0;
+  margin-bottom: 0.4rem;
+}
+
+.card p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.newsletter {
+  margin-top: 1rem;
+  background: rgba(0, 121, 107, 0.12);
+  border: 1px solid #8fcbc3;
+  border-radius: 16px;
+  padding: 1.1rem;
+}
+
+.newsletter h2 {
+  margin-top: 0;
+}
+
+.newsletter-form {
+  display: flex;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+input {
+  border: 1px solid #b9b9b9;
+  border-radius: 12px;
+  padding: 0.7rem 0.9rem;
+  font-size: 1rem;
+}
+
+.site-footer {
+  text-align: center;
+  padding: 1rem;
+  color: var(--muted);
+}
+
+.auth-body,
+.admin-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-wrap {
+  display: grid;
+  place-items: center;
+  flex: 1;
+}
+
+.auth-card,
+.admin-panel {
+  width: min(520px, 100%);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 1.1rem;
+}
+
+.auth-form {
+  display: grid;
+  gap: 0.7rem;
+  margin: 1rem 0;
+}
+
+.error {
+  color: var(--danger);
+  margin-bottom: 0.4rem;
+}
+
+.admin-main {
+  flex: 1;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 760px) {
+  .grid,
+  .admin-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero {
+    padding: 1.4rem;
+  }
+}
