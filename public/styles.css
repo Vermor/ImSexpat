@@ -148,6 +148,24 @@ textarea {
   resize: vertical;
 }
 
+.rich-editor {
+  background: #fff;
+  border: 1px solid #b9b9b9;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.rich-editor .ql-toolbar.ql-snow {
+  border: 0;
+  border-bottom: 1px solid #e2e2e2;
+}
+
+.rich-editor .ql-container.ql-snow {
+  border: 0;
+  min-height: 240px;
+  font-size: 1rem;
+}
+
 .site-footer {
   text-align: center;
   padding: 1rem;

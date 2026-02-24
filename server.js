@@ -2,6 +2,7 @@
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
+const sanitizeHtml = require('sanitize-html');
 const path = require('path');
 const fs = require('fs');
 const {
@@ -109,11 +110,39 @@ const normalizeArticlePayload = (payload, file, currentCover = '') => {
     ? `/uploads/${file.filename}`
     : sanitizeText(payload.coverImageUrl, 300) || currentCover || '';
 
+  const rawContent = String(payload.content ?? '');
+  const safeContent = sanitizeHtml(rawContent, {
+    allowedTags: [
+      'p', 'br', 'strong', 'b', 'em', 'i', 'u', 's',
+      'h1', 'h2', 'h3', 'h4', 'blockquote', 'ul', 'ol', 'li',
+      'a', 'img', 'hr', 'span', 'code', 'pre'
+    ],
+    allowedAttributes: {
+      a: ['href', 'target', 'rel'],
+      img: ['src', 'alt'],
+      p: ['style'],
+      h1: ['style'],
+      h2: ['style'],
+      h3: ['style'],
+      h4: ['style'],
+      span: ['style']
+    },
+    allowedStyles: {
+      '*': {
+        'text-align': [/^left$/, /^right$/, /^center$/, /^justify$/]
+      }
+    },
+    allowedSchemes: ['http', 'https', 'mailto'],
+    transformTags: {
+      a: sanitizeHtml.simpleTransform('a', { rel: 'noopener noreferrer' }, true)
+    }
+  });
+
   return {
     title: sanitizeText(payload.title, 180),
     slug: slugify(sanitizeText(payload.slug, 180) || sanitizeText(payload.title, 180)),
     excerpt: sanitizeText(payload.excerpt, 400),
-    content: sanitizeText(payload.content, 20000),
+    content: safeContent.slice(0, 30000),
     coverImageUrl: nextCover,
     published
   };

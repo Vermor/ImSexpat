@@ -30,13 +30,6 @@
       const contentEl = document.getElementById('content');
       const coverEl = document.getElementById('cover');
 
-      const escapeHtml = (value) => String(value || '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
-
       fetch(`/api/articles/${encodeURIComponent(slug)}`, { cache: 'no-store' })
         .then((res) => {
           if (!res.ok) throw new Error('Article introuvable');
@@ -52,7 +45,7 @@
             coverEl.hidden = false;
           }
 
-          contentEl.innerHTML = `<p>${escapeHtml(article.content).replaceAll('\n', '</p><p>')}</p>`;
+          contentEl.innerHTML = article.content || '<p>Contenu vide.</p>';
         })
         .catch(() => {
           titleEl.textContent = 'Article introuvable';
