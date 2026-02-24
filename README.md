@@ -18,6 +18,7 @@ Puis ouvre `http://localhost:3000`.
 - `ADMIN_PASSWORD`: mot de passe admin.
 - `COOKIE_SECRET`: secret pour signer le cookie de session admin.
 - `DATABASE_URL`: URL PostgreSQL (Railway DB).
+- `PRIMARY_DOMAIN`: domaine principal public (ex: `imsexpat.site`).
 
 ## Securite mot de passe
 
@@ -61,3 +62,6 @@ Important Railway:
 2. Railway detecte Node automatiquement.
 3. Ajoute les variables d'environnement au service web.
 4. Deploy.
+
+Note domaine:
+- En production, les requetes sur `*.up.railway.app` sont redirigees en 301 vers `https://PRIMARY_DOMAIN`.

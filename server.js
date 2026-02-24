@@ -21,6 +21,7 @@ const {
 const app = express();
 const port = process.env.PORT || 3000;
 const isProd = process.env.NODE_ENV === 'production';
+const primaryDomain = process.env.PRIMARY_DOMAIN || 'imsexpat.site';
 
 const uploadsDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -48,6 +49,18 @@ const upload = multer({
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(cookieParser(process.env.COOKIE_SECRET || 'local-dev-secret'));
+
+app.use((req, res, next) => {
+  const host = (req.headers.host || '').toLowerCase();
+  const targetHost = primaryDomain.toLowerCase();
+
+  if (isProd && host.endsWith('up.railway.app') && targetHost) {
+    return res.redirect(301, `https://${targetHost}${req.originalUrl}`);
+  }
+
+  return next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 const requireAdminPasswordConfig = (req, res, next) => {
