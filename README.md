@@ -33,14 +33,27 @@ Le mot de passe ne doit jamais etre commit.
 3. Partage cette variable avec le service web ImSexpat (`Share with service`).
 4. Redeploy le service web.
 
-Au demarrage, l'app cree automatiquement la table `landing_content` si elle n'existe pas.
+Au demarrage, l'app cree automatiquement les tables `landing_content` et `articles` si elles n'existent pas.
 
 ## Admin landing
 
 - Dashboard admin: `/admin`
 - Editeur landing: `/admin/landing`
+- Editeur articles: `/admin/articles`
 
 Tous les textes de la landing sont modifiables depuis cette page.
+
+## Articles et images
+
+- CRUD articles dans `/admin/articles` (titre, slug, resume, contenu, statut publie).
+- Upload image de couverture (max 5MB, formats image).
+- Listing public: `/articles`
+- Detail public: `/article/:slug`
+
+Important Railway:
+- Les fichiers uploades dans `public/uploads` sont sur le disque du service.
+- Selon la config Railway, ce stockage peut etre ephemere.
+- Pour du long terme, prevois Railway Volume ou stockage objet (S3/Cloudinary).
 
 ## Deploiement Railway
 

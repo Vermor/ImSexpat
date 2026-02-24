@@ -1,0 +1,64 @@
+﻿<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Article | ImSexpat</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="brand">ImSexpat</div>
+      <a class="admin-link" href="/articles">Tous les articles</a>
+    </header>
+
+    <main>
+      <article class="admin-panel admin-panel-wide article-view">
+        <h1 id="title">Chargement...</h1>
+        <p id="excerpt" class="subtitle"></p>
+        <img id="cover" class="cover-image" alt="" hidden />
+        <div id="content" class="article-content"></div>
+      </article>
+    </main>
+
+    <script>
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      const slug = pathParts[pathParts.length - 1] || '';
+
+      const titleEl = document.getElementById('title');
+      const excerptEl = document.getElementById('excerpt');
+      const contentEl = document.getElementById('content');
+      const coverEl = document.getElementById('cover');
+
+      const escapeHtml = (value) => String(value || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+
+      fetch(`/api/articles/${encodeURIComponent(slug)}`, { cache: 'no-store' })
+        .then((res) => {
+          if (!res.ok) throw new Error('Article introuvable');
+          return res.json();
+        })
+        .then((article) => {
+          titleEl.textContent = article.title;
+          excerptEl.textContent = article.excerpt || '';
+
+          if (article.coverImageUrl) {
+            coverEl.src = article.coverImageUrl;
+            coverEl.alt = article.title;
+            coverEl.hidden = false;
+          }
+
+          contentEl.innerHTML = `<p>${escapeHtml(article.content).replaceAll('\n', '</p><p>')}</p>`;
+        })
+        .catch(() => {
+          titleEl.textContent = 'Article introuvable';
+          excerptEl.textContent = '';
+          contentEl.innerHTML = '<p>Ce contenu nest pas disponible.</p>';
+        });
+    </script>
+  </body>
+</html>

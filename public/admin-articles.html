@@ -1,0 +1,201 @@
+﻿<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Articles | ImSexpat</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="admin-body">
+    <header class="site-header">
+      <div class="brand">IMSEXPAT ADMIN</div>
+      <form method="post" action="/admin/logout">
+        <button class="btn btn-ghost" type="submit">Se deconnecter</button>
+      </form>
+    </header>
+
+    <main class="admin-main">
+      <section class="admin-panel admin-panel-wide">
+        <h1>Articles</h1>
+        <p>Cree et gere les articles avec image.</p>
+        <p id="articleStatus" class="success" hidden>Article enregistre.</p>
+
+        <form id="articleForm" class="editor-form" enctype="multipart/form-data">
+          <input type="hidden" name="id" />
+
+          <label class="field">
+            <span>Titre</span>
+            <input name="title" type="text" required />
+          </label>
+
+          <label class="field">
+            <span>Slug (optionnel)</span>
+            <input name="slug" type="text" placeholder="auto-genere depuis le titre" />
+          </label>
+
+          <label class="field">
+            <span>Resume</span>
+            <textarea name="excerpt" rows="2"></textarea>
+          </label>
+
+          <label class="field">
+            <span>Contenu</span>
+            <textarea name="content" rows="8" required></textarea>
+          </label>
+
+          <div class="field-row">
+            <label class="field">
+              <span>URL image (optionnel)</span>
+              <input name="coverImageUrl" type="text" placeholder="https://..." />
+            </label>
+            <label class="field">
+              <span>Upload image (max 5MB)</span>
+              <input name="coverImage" type="file" accept="image/*" />
+            </label>
+          </div>
+
+          <label class="field check-field">
+            <input name="published" type="checkbox" />
+            <span>Publie</span>
+          </label>
+
+          <div class="editor-actions">
+            <div class="editor-actions-left">
+              <a href="/admin" class="btn btn-ghost">Retour admin</a>
+              <button id="resetFormBtn" class="btn btn-ghost" type="button">Nouveau</button>
+            </div>
+            <button class="btn btn-primary" type="submit">Enregistrer</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="admin-panel admin-panel-wide article-list-panel">
+        <h2>Liste des articles</h2>
+        <div id="articlesList" class="admin-list"></div>
+      </section>
+    </main>
+
+    <script>
+      const form = document.getElementById('articleForm');
+      const statusEl = document.getElementById('articleStatus');
+      const listEl = document.getElementById('articlesList');
+      const resetBtn = document.getElementById('resetFormBtn');
+
+      const setStatus = (message) => {
+        statusEl.textContent = message;
+        statusEl.hidden = false;
+        setTimeout(() => {
+          statusEl.hidden = true;
+        }, 1800);
+      };
+
+      const resetForm = () => {
+        form.reset();
+        form.elements.id.value = '';
+      };
+
+      const renderList = (articles) => {
+        if (!Array.isArray(articles) || articles.length === 0) {
+          listEl.innerHTML = '<p class="muted">Aucun article pour le moment.</p>';
+          return;
+        }
+
+        listEl.innerHTML = articles.map((article) => {
+          const state = article.published ? 'Publie' : 'Brouillon';
+          return `
+            <article class="list-item">
+              <div>
+                <strong>${article.title}</strong>
+                <p class="muted">/${article.slug} · ${state}</p>
+              </div>
+              <div class="list-actions">
+                <button class="btn btn-ghost" type="button" data-action="edit" data-id="${article.id}">Modifier</button>
+                <button class="btn btn-ghost" type="button" data-action="delete" data-id="${article.id}">Supprimer</button>
+              </div>
+            </article>
+          `;
+        }).join('');
+      };
+
+      const loadArticles = async () => {
+        const response = await fetch('/api/admin/articles', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Impossible de charger les articles');
+        const data = await response.json();
+        renderList(data);
+      };
+
+      const loadOne = async (id) => {
+        const response = await fetch(`/api/admin/articles/${id}`, { cache: 'no-store' });
+        if (!response.ok) throw new Error('Article introuvable');
+        const article = await response.json();
+
+        form.elements.id.value = article.id;
+        form.elements.title.value = article.title || '';
+        form.elements.slug.value = article.slug || '';
+        form.elements.excerpt.value = article.excerpt || '';
+        form.elements.content.value = article.content || '';
+        form.elements.coverImageUrl.value = article.coverImageUrl || '';
+        form.elements.published.checked = Boolean(article.published);
+      };
+
+      const deleteOne = async (id) => {
+        const response = await fetch(`/api/admin/articles/${id}`, { method: 'DELETE' });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.error || 'Suppression impossible');
+        }
+      };
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const payload = new FormData(form);
+
+        const response = await fetch('/api/admin/articles', {
+          method: 'POST',
+          body: payload
+        });
+
+        if (!response.ok) {
+          const errorPayload = await response.json().catch(() => ({}));
+          alert(errorPayload.error || 'Erreur lors de la sauvegarde');
+          return;
+        }
+
+        setStatus('Article enregistre.');
+        resetForm();
+        await loadArticles();
+      });
+
+      listEl.addEventListener('click', async (event) => {
+        const target = event.target;
+        const action = target.getAttribute('data-action');
+        const id = target.getAttribute('data-id');
+
+        if (!action || !id) return;
+
+        if (action === 'edit') {
+          loadOne(id).catch((error) => alert(error.message));
+          return;
+        }
+
+        if (action === 'delete') {
+          const ok = window.confirm('Supprimer cet article ?');
+          if (!ok) return;
+          deleteOne(id)
+            .then(async () => {
+              setStatus('Article supprime.');
+              resetForm();
+              await loadArticles();
+            })
+            .catch((error) => alert(error.message));
+        }
+      });
+
+      resetBtn.addEventListener('click', () => resetForm());
+
+      loadArticles().catch((error) => {
+        alert(error.message);
+      });
+    </script>
+  </body>
+</html>

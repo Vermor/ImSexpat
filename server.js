@@ -1,17 +1,49 @@
 ﻿require('dotenv').config();
 const express = require('express');
 const cookieParser = require('cookie-parser');
+const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const {
   DEFAULT_LANDING_CONTENT,
   initStorage,
   getLandingContent,
-  updateLandingContent
+  updateLandingContent,
+  listArticles,
+  getArticleById,
+  getArticleBySlug,
+  createArticle,
+  updateArticle,
+  deleteArticle,
+  slugify
 } = require('./storage');
 
 const app = express();
 const port = process.env.PORT || 3000;
 const isProd = process.env.NODE_ENV === 'production';
+
+const uploadsDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadsDir),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
+      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+    }
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if ((file.mimetype || '').startsWith('image/')) {
+      cb(null, true);
+      return;
+    }
+    cb(new Error('Only image files are allowed'));
+  }
+});
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
@@ -56,8 +88,34 @@ const normalizeLandingPayload = (payload) => ({
   footerText: sanitizeText(payload.footerText, 120) || DEFAULT_LANDING_CONTENT.footerText
 });
 
+const normalizeArticlePayload = (payload, file, currentCover = '') => {
+  const publishedRaw = payload.published;
+  const published = publishedRaw === true || publishedRaw === 'true' || publishedRaw === 'on' || publishedRaw === '1';
+
+  const nextCover = file
+    ? `/uploads/${file.filename}`
+    : sanitizeText(payload.coverImageUrl, 300) || currentCover || '';
+
+  return {
+    title: sanitizeText(payload.title, 180),
+    slug: slugify(sanitizeText(payload.slug, 180) || sanitizeText(payload.title, 180)),
+    excerpt: sanitizeText(payload.excerpt, 400),
+    content: sanitizeText(payload.content, 20000),
+    coverImageUrl: nextCover,
+    published
+  };
+};
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('/articles', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'articles.html'));
+});
+
+app.get('/article/:slug', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'article.html'));
 });
 
 app.get('/api/landing', async (req, res) => {
@@ -67,6 +125,39 @@ app.get('/api/landing', async (req, res) => {
   } catch (error) {
     console.error('Failed to load landing content:', error);
     res.status(500).json({ error: 'Failed to load landing content' });
+  }
+});
+
+app.get('/api/articles', async (req, res) => {
+  try {
+    const rows = await listArticles();
+    const published = rows.filter((a) => a.published).map((a) => ({
+      id: a.id,
+      title: a.title,
+      slug: a.slug,
+      excerpt: a.excerpt,
+      coverImageUrl: a.coverImageUrl,
+      createdAt: a.createdAt,
+      updatedAt: a.updatedAt
+    }));
+    res.json(published);
+  } catch (error) {
+    console.error('Failed to list public articles:', error);
+    res.status(500).json({ error: 'Failed to list articles' });
+  }
+});
+
+app.get('/api/articles/:slug', async (req, res) => {
+  try {
+    const article = await getArticleBySlug(req.params.slug);
+    if (!article) {
+      res.status(404).json({ error: 'Article not found' });
+      return;
+    }
+    res.json(article);
+  } catch (error) {
+    console.error('Failed to load article:', error);
+    res.status(500).json({ error: 'Failed to load article' });
   }
 });
 
@@ -108,6 +199,10 @@ app.get('/admin/landing', protectAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin-landing.html'));
 });
 
+app.get('/admin/articles', protectAdmin, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin-articles.html'));
+});
+
 app.get('/api/admin/landing', protectAdmin, async (req, res) => {
   try {
     const content = await getLandingContent();
@@ -127,6 +222,108 @@ app.post('/api/admin/landing', protectAdmin, async (req, res) => {
     console.error('Failed to save landing content:', error);
     res.status(500).json({ error: 'Failed to save landing content' });
   }
+});
+
+app.get('/api/admin/articles', protectAdmin, async (req, res) => {
+  try {
+    const rows = await listArticles();
+    res.json(rows);
+  } catch (error) {
+    console.error('Failed to list admin articles:', error);
+    res.status(500).json({ error: 'Failed to list admin articles' });
+  }
+});
+
+app.get('/api/admin/articles/:id', protectAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: 'Invalid article id' });
+      return;
+    }
+
+    const article = await getArticleById(id);
+    if (!article) {
+      res.status(404).json({ error: 'Article not found' });
+      return;
+    }
+
+    res.json(article);
+  } catch (error) {
+    console.error('Failed to load admin article:', error);
+    res.status(500).json({ error: 'Failed to load admin article' });
+  }
+});
+
+app.post('/api/admin/articles', protectAdmin, upload.single('coverImage'), async (req, res) => {
+  try {
+    const idValue = sanitizeText(req.body.id, 24);
+    const id = idValue ? Number(idValue) : null;
+
+    if (idValue && (!Number.isInteger(id) || id <= 0)) {
+      res.status(400).json({ error: 'Invalid article id' });
+      return;
+    }
+
+    if (id) {
+      const current = await getArticleById(id);
+      if (!current) {
+        res.status(404).json({ error: 'Article not found' });
+        return;
+      }
+
+      const payload = normalizeArticlePayload(req.body, req.file, current.coverImageUrl);
+      if (!payload.title) {
+        res.status(400).json({ error: 'Title is required' });
+        return;
+      }
+
+      const updated = await updateArticle(id, payload);
+      res.json({ ok: true, article: updated });
+      return;
+    }
+
+    const payload = normalizeArticlePayload(req.body, req.file);
+    if (!payload.title) {
+      res.status(400).json({ error: 'Title is required' });
+      return;
+    }
+
+    const created = await createArticle(payload);
+    res.json({ ok: true, article: created });
+  } catch (error) {
+    console.error('Failed to save article:', error);
+    res.status(500).json({ error: 'Failed to save article' });
+  }
+});
+
+app.delete('/api/admin/articles/:id', protectAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: 'Invalid article id' });
+      return;
+    }
+
+    const removed = await deleteArticle(id);
+    if (!removed) {
+      res.status(404).json({ error: 'Article not found' });
+      return;
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Failed to delete article:', error);
+    res.status(500).json({ error: 'Failed to delete article' });
+  }
+});
+
+app.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError || error.message === 'Only image files are allowed') {
+    res.status(400).json({ error: error.message });
+    return;
+  }
+  next(error);
 });
 
 const start = async () => {

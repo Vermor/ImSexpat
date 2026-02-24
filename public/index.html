@@ -18,7 +18,7 @@
         <h1 id="heroTitle">Journal d'un sexpat</h1>
         <p class="subtitle" id="heroSubtitle">recit, informations, news sur la vie d'un sexpat</p>
         <div class="hero-actions">
-          <a id="heroCta" href="#articles" class="btn btn-ghost">Voir les themes</a>
+          <a id="heroCta" href="/articles" class="btn btn-ghost">Voir les themes</a>
         </div>
       </section>
 
@@ -79,7 +79,7 @@
         const cta = document.getElementById('heroCta');
         if (cta && content.ctaText) {
           cta.textContent = content.ctaText;
-          cta.href = content.ctaHref || '#articles';
+          cta.href = content.ctaHref || '/articles';
         }
       };
 
