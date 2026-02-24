@@ -67,6 +67,9 @@
 
           <label class="field">
             <span>Contenu</span>
+            <div class="editor-toolbar-row">
+              <button id="openMediaPickerBtn" class="btn btn-ghost" type="button">Inserer depuis Media</button>
+            </div>
             <div id="contentEditor" class="rich-editor"></div>
             <input name="content" type="hidden" />
           </label>
@@ -113,6 +116,17 @@
       </section>
     </main>
 
+    <div id="mediaPickerModal" class="modal" hidden>
+      <div class="modal-backdrop" data-close-media-modal="1"></div>
+      <section class="modal-card">
+        <header class="modal-header">
+          <h2>Bibliotheque Media</h2>
+          <button id="closeMediaPickerBtn" class="btn btn-ghost" type="button">Fermer</button>
+        </header>
+        <div id="mediaPickerGrid" class="media-grid"></div>
+      </section>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js"></script>
     <script>
       const form = document.getElementById('articleForm');
@@ -126,6 +140,10 @@
       const tagFilter = document.getElementById('tagFilter');
       const runFilterBtn = document.getElementById('runFilterBtn');
       const pagerRow = document.getElementById('pagerRow');
+      const openMediaPickerBtn = document.getElementById('openMediaPickerBtn');
+      const closeMediaPickerBtn = document.getElementById('closeMediaPickerBtn');
+      const mediaPickerModal = document.getElementById('mediaPickerModal');
+      const mediaPickerGrid = document.getElementById('mediaPickerGrid');
 
       const draftKey = 'imsexpat_admin_article_draft_v1';
       let dirty = false;
@@ -148,37 +166,52 @@
 
       const toolbar = quill.getModule('toolbar');
 
-      const uploadInlineImage = () => {
-        const input = document.createElement('input');
-        input.setAttribute('type', 'file');
-        input.setAttribute('accept', 'image/*');
-        input.click();
-
-        input.onchange = async () => {
-          const file = input.files && input.files[0];
-          if (!file) return;
-
-          const body = new FormData();
-          body.append('image', file);
-
-          try {
-            const response = await fetch('/api/admin/uploads/image', { method: 'POST', body });
-            const payload = await response.json().catch(() => ({}));
-            if (!response.ok || !payload.url) {
-              throw new Error(payload.error || 'Upload image impossible');
-            }
-
-            const range = quill.getSelection(true) || { index: quill.getLength(), length: 0 };
-            quill.insertEmbed(range.index, 'image', payload.url, 'user');
-            quill.setSelection(range.index + 1, 0);
-            markDirty();
-            saveDraft();
-          } catch (error) {
-            alert(error.message || 'Upload image impossible');
-          }
-        };
+      const insertImageAtCursor = (url) => {
+        if (!url) return;
+        const range = quill.getSelection(true) || { index: quill.getLength(), length: 0 };
+        quill.insertEmbed(range.index, 'image', url, 'user');
+        quill.setSelection(range.index + 1, 0);
+        markDirty();
+        saveDraft();
       };
-      toolbar.addHandler('image', uploadInlineImage);
+
+      const renderMediaPicker = (files) => {
+        if (!Array.isArray(files) || files.length === 0) {
+          mediaPickerGrid.innerHTML = '<p class="muted">Aucune image disponible.</p>';
+          return;
+        }
+
+        mediaPickerGrid.innerHTML = files.map((file) => `
+          <article class="media-card">
+            <img src="${file.url}" alt="${escapeHtml(file.name || '')}" loading="lazy" />
+            <div class="media-meta">
+              <strong title="${escapeHtml(file.name || '')}">${escapeHtml(file.name || '')}</strong>
+            </div>
+            <div class="media-actions">
+              <button class="btn btn-primary" type="button" data-insert-url="${file.url}">Inserer</button>
+            </div>
+          </article>
+        `).join('');
+      };
+
+      const openMediaPicker = async () => {
+        mediaPickerModal.hidden = false;
+        mediaPickerGrid.innerHTML = '<p class="muted">Chargement...</p>';
+        try {
+          const response = await fetch('/api/admin/uploads', { cache: 'no-store' });
+          if (!response.ok) throw new Error('Chargement media impossible');
+          const files = await response.json();
+          renderMediaPicker(files);
+        } catch (error) {
+          mediaPickerGrid.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+        }
+      };
+
+      const closeMediaPicker = () => {
+        mediaPickerModal.hidden = true;
+      };
+
+      toolbar.addHandler('image', openMediaPicker);
 
       const slugify = (value) => String(value || '')
         .toLowerCase()
@@ -511,13 +544,29 @@
       const params = new URLSearchParams(window.location.search);
       const pendingImage = params.get('insertImage');
       if (pendingImage) {
-        const range = quill.getSelection(true) || { index: quill.getLength(), length: 0 };
-        quill.insertEmbed(range.index, 'image', pendingImage, 'user');
-        quill.setSelection(range.index + 1, 0);
+        insertImageAtCursor(pendingImage);
         params.delete('insertImage');
         const next = params.toString();
         window.history.replaceState({}, '', `${window.location.pathname}${next ? `?${next}` : ''}`);
       }
+
+      openMediaPickerBtn.addEventListener('click', () => {
+        openMediaPicker().catch((error) => alert(error.message));
+      });
+
+      closeMediaPickerBtn.addEventListener('click', closeMediaPicker);
+      mediaPickerModal.addEventListener('click', (event) => {
+        if (event.target.getAttribute('data-close-media-modal') === '1') {
+          closeMediaPicker();
+        }
+      });
+
+      mediaPickerGrid.addEventListener('click', (event) => {
+        const url = event.target.getAttribute('data-insert-url');
+        if (!url) return;
+        insertImageAtCursor(url);
+        closeMediaPicker();
+      });
 
       loadDraft();
       scheduleSlugCheck();
