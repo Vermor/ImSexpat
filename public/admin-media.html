@@ -119,8 +119,18 @@
         await loadMedia();
       });
 
-      dz.on('error', (file, message) => {
-        const error = typeof message === 'string' ? message : 'Upload impossible';
+      dz.on('error', (file, message, xhr) => {
+        let error = typeof message === 'string' ? message : 'Upload impossible';
+        if (xhr && xhr.responseText) {
+          try {
+            const payload = JSON.parse(xhr.responseText);
+            if (payload && payload.error) {
+              error = payload.error;
+            }
+          } catch (_error) {
+            // keep generic error text
+          }
+        }
         alert(error);
       });
 

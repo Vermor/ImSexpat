@@ -331,7 +331,7 @@ app.get('/api/admin/uploads', protectAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/admin/uploads', protectAdmin, upload.array('image', 20), (req, res) => {
+app.post('/api/admin/uploads', protectAdmin, upload.any(), (req, res) => {
   const files = (req.files || []).map((file) => ({
     name: file.filename,
     url: `/uploads/${file.filename}`,
