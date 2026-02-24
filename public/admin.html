@@ -36,6 +36,52 @@
           </article>
         </div>
       </section>
+
+      <section class="admin-panel article-list-panel">
+        <h2>Activite admin recente</h2>
+        <div id="activityList" class="admin-list">
+          <p class="muted">Chargement...</p>
+        </div>
+      </section>
     </main>
+
+    <script>
+      const listEl = document.getElementById('activityList');
+
+      const escapeHtml = (value) => String(value || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+
+      const render = (items) => {
+        if (!Array.isArray(items) || items.length === 0) {
+          listEl.innerHTML = '<p class="muted">Aucune action recente.</p>';
+          return;
+        }
+
+        listEl.innerHTML = items.map((item) => {
+          const when = new Date(item.createdAt).toLocaleString('fr-FR');
+          return `
+            <article class="list-item vertical-item">
+              <strong>${escapeHtml(item.summary || item.action)}</strong>
+              <p class="muted">${escapeHtml(item.action)} · ${escapeHtml(item.entityType)} · ${escapeHtml(item.entityId || '')}</p>
+              <p class="muted">${escapeHtml(item.actor || 'admin')} · ${when}</p>
+            </article>
+          `;
+        }).join('');
+      };
+
+      fetch('/api/admin/activity?limit=20', { cache: 'no-store' })
+        .then((res) => {
+          if (!res.ok) throw new Error('Impossible de charger les logs');
+          return res.json();
+        })
+        .then((items) => render(items))
+        .catch((error) => {
+          listEl.innerHTML = `<p class="error">${error.message}</p>`;
+        });
+    </script>
   </body>
 </html>

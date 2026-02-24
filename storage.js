@@ -21,6 +21,7 @@ let pool = null;
 let inMemoryContent = { ...DEFAULT_LANDING_CONTENT };
 let inMemoryArticles = [];
 let inMemoryArticleId = 1;
+let inMemoryLogs = [];
 
 const createPool = () => {
   const databaseUrl = String(process.env.DATABASE_URL || '').trim();
@@ -72,9 +73,24 @@ const mapArticleRow = (row) => ({
   excerpt: row.excerpt,
   content: row.content,
   coverImageUrl: row.cover_image_url,
+  seoTitle: row.seo_title,
+  seoDescription: row.seo_description,
+  ogImageUrl: row.og_image_url,
+  categories: row.categories || [],
+  tags: row.tags || [],
   published: row.published,
   createdAt: row.created_at,
   updatedAt: row.updated_at
+});
+
+const mapLogRow = (row) => ({
+  id: row.id,
+  action: row.action,
+  entityType: row.entity_type,
+  entityId: row.entity_id,
+  summary: row.summary,
+  actor: row.actor,
+  createdAt: row.created_at
 });
 
 const landingTableSql = `
@@ -106,9 +122,26 @@ const articlesTableSql = `
     excerpt TEXT NOT NULL DEFAULT '',
     content TEXT NOT NULL DEFAULT '',
     cover_image_url TEXT NOT NULL DEFAULT '',
+    seo_title TEXT NOT NULL DEFAULT '',
+    seo_description TEXT NOT NULL DEFAULT '',
+    og_image_url TEXT NOT NULL DEFAULT '',
+    categories TEXT[] NOT NULL DEFAULT '{}',
+    tags TEXT[] NOT NULL DEFAULT '{}',
     published BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+`;
+
+const logsTableSql = `
+  CREATE TABLE IF NOT EXISTS admin_activity_logs (
+    id SERIAL PRIMARY KEY,
+    action TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    actor TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
 `;
 
@@ -192,6 +225,18 @@ const slugify = (value) => String(value || '')
   .replace(/(^-|-$)/g, '')
   .slice(0, 80) || 'article';
 
+const normalizeList = (value) => {
+  if (Array.isArray(value)) {
+    return [...new Set(value.map((x) => String(x || '').trim()).filter(Boolean).slice(0, 12))];
+  }
+  return String(value || '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .filter((x, i, arr) => arr.indexOf(x) === i)
+    .slice(0, 12);
+};
+
 const initStorage = async () => {
   pool = createPool();
 
@@ -208,6 +253,16 @@ const initStorage = async () => {
 
   await pool.query(landingTableSql);
   await pool.query(articlesTableSql);
+  await pool.query(logsTableSql);
+  await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS seo_title TEXT NOT NULL DEFAULT '';");
+  await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS seo_description TEXT NOT NULL DEFAULT '';");
+  await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS og_image_url TEXT NOT NULL DEFAULT '';");
+  await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS categories TEXT[] NOT NULL DEFAULT '{}';");
+  await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';");
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_articles_published_updated ON articles(published, updated_at DESC);');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_articles_categories ON articles USING GIN(categories);');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_articles_tags ON articles USING GIN(tags);');
+  await pool.query("CREATE INDEX IF NOT EXISTS idx_articles_search ON articles USING GIN (to_tsvector('simple', coalesce(title,'') || ' ' || coalesce(excerpt,'') || ' ' || coalesce(content,'')));");
   await pool.query(upsertLandingSql, landingValues(DEFAULT_LANDING_CONTENT));
   console.log('PostgreSQL storage ready for landing and articles.');
 };
@@ -272,14 +327,100 @@ const ensureUniqueSlug = async (baseSlug, articleId = null) => {
   }
 };
 
-const listArticles = async () => {
+const isSlugAvailable = async (slug, excludeId = null) => {
+  const target = slugify(slug);
+  if (!target) return false;
+
   if (!pool) {
-    return [...inMemoryArticles]
-      .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    return !inMemoryArticles.some((a) => a.slug === target && a.id !== excludeId);
   }
 
-  const result = await pool.query('SELECT * FROM articles ORDER BY updated_at DESC;');
-  return result.rows.map(mapArticleRow);
+  const query = excludeId
+    ? await pool.query('SELECT id FROM articles WHERE slug = $1 AND id <> $2 LIMIT 1;', [target, excludeId])
+    : await pool.query('SELECT id FROM articles WHERE slug = $1 LIMIT 1;', [target]);
+  return query.rowCount === 0;
+};
+
+const listArticles = async (options = {}) => {
+  const page = Math.max(1, Number(options.page || 1));
+  const pageSize = Math.min(50, Math.max(1, Number(options.pageSize || 9)));
+  const q = String(options.q || '').trim();
+  const category = String(options.category || '').trim();
+  const tag = String(options.tag || '').trim();
+  const publishedOnly = Boolean(options.publishedOnly);
+
+  if (!pool) {
+    let items = [...inMemoryArticles];
+    if (publishedOnly) items = items.filter((a) => a.published);
+    if (category) items = items.filter((a) => (a.categories || []).includes(category));
+    if (tag) items = items.filter((a) => (a.tags || []).includes(tag));
+    if (q) {
+      const needle = q.toLowerCase();
+      items = items.filter((a) => `${a.title} ${a.excerpt} ${a.content}`.toLowerCase().includes(needle));
+    }
+
+    items.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    const total = items.length;
+    const offset = (page - 1) * pageSize;
+    return {
+      items: items.slice(offset, offset + pageSize),
+      pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
+    };
+  }
+
+  const where = [];
+  const values = [];
+  if (publishedOnly) {
+    values.push(true);
+    where.push(`published = $${values.length}`);
+  }
+  if (category) {
+    values.push(category);
+    where.push(`$${values.length} = ANY(categories)`);
+  }
+  if (tag) {
+    values.push(tag);
+    where.push(`$${values.length} = ANY(tags)`);
+  }
+  if (q) {
+    values.push(q);
+    const idx = values.length;
+    where.push(`to_tsvector('simple', coalesce(title,'') || ' ' || coalesce(excerpt,'') || ' ' || coalesce(content,'')) @@ plainto_tsquery('simple', $${idx})`);
+  }
+
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const totalRes = await pool.query(`SELECT COUNT(*)::int AS total FROM articles ${whereSql};`, values);
+  const total = totalRes.rows[0].total;
+
+  values.push(pageSize);
+  values.push((page - 1) * pageSize);
+  const rows = await pool.query(
+    `SELECT * FROM articles ${whereSql} ORDER BY updated_at DESC LIMIT $${values.length - 1} OFFSET $${values.length};`,
+    values
+  );
+
+  return {
+    items: rows.rows.map(mapArticleRow),
+    pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) }
+  };
+};
+
+const getTaxonomies = async () => {
+  if (!pool) {
+    const categories = [...new Set(inMemoryArticles.flatMap((a) => a.categories || []))].sort();
+    const tags = [...new Set(inMemoryArticles.flatMap((a) => a.tags || []))].sort();
+    return { categories, tags };
+  }
+
+  const result = await pool.query(`
+    SELECT
+      ARRAY(SELECT DISTINCT unnest(categories) ORDER BY 1) AS categories,
+      ARRAY(SELECT DISTINCT unnest(tags) ORDER BY 1) AS tags
+    FROM articles;
+  `);
+
+  const row = result.rows[0] || {};
+  return { categories: row.categories || [], tags: row.tags || [] };
 };
 
 const getArticleById = async (id) => {
@@ -305,6 +446,8 @@ const getArticleBySlug = async (slug) => {
 const createArticle = async (input) => {
   const now = new Date().toISOString();
   const slug = await ensureUniqueSlug(input.slug || input.title);
+  const categories = normalizeList(input.categories);
+  const tags = normalizeList(input.tags);
 
   if (!pool) {
     const article = {
@@ -314,6 +457,11 @@ const createArticle = async (input) => {
       excerpt: input.excerpt,
       content: input.content,
       coverImageUrl: input.coverImageUrl,
+      seoTitle: input.seoTitle,
+      seoDescription: input.seoDescription,
+      ogImageUrl: input.ogImageUrl,
+      categories,
+      tags,
       published: input.published,
       createdAt: now,
       updatedAt: now
@@ -325,9 +473,21 @@ const createArticle = async (input) => {
   }
 
   const result = await pool.query(
-    `INSERT INTO articles (title, slug, excerpt, content, cover_image_url, published, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *;`,
-    [input.title, slug, input.excerpt, input.content, input.coverImageUrl, input.published]
+    `INSERT INTO articles (title, slug, excerpt, content, cover_image_url, seo_title, seo_description, og_image_url, categories, tags, published, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW()) RETURNING *;`,
+    [
+      input.title,
+      slug,
+      input.excerpt,
+      input.content,
+      input.coverImageUrl,
+      input.seoTitle,
+      input.seoDescription,
+      input.ogImageUrl,
+      categories,
+      tags,
+      input.published
+    ]
   );
 
   return mapArticleRow(result.rows[0]);
@@ -335,6 +495,8 @@ const createArticle = async (input) => {
 
 const updateArticle = async (id, input) => {
   const slug = await ensureUniqueSlug(input.slug || input.title, id);
+  const categories = normalizeList(input.categories);
+  const tags = normalizeList(input.tags);
 
   if (!pool) {
     const idx = inMemoryArticles.findIndex((a) => a.id === id);
@@ -347,6 +509,11 @@ const updateArticle = async (id, input) => {
       excerpt: input.excerpt,
       content: input.content,
       coverImageUrl: input.coverImageUrl,
+      seoTitle: input.seoTitle,
+      seoDescription: input.seoDescription,
+      ogImageUrl: input.ogImageUrl,
+      categories,
+      tags,
       published: input.published,
       updatedAt: new Date().toISOString()
     };
@@ -362,11 +529,29 @@ const updateArticle = async (id, input) => {
          excerpt = $3,
          content = $4,
          cover_image_url = $5,
-         published = $6,
+         seo_title = $6,
+         seo_description = $7,
+         og_image_url = $8,
+         categories = $9,
+         tags = $10,
+         published = $11,
          updated_at = NOW()
-     WHERE id = $7
+     WHERE id = $12
      RETURNING *;`,
-    [input.title, slug, input.excerpt, input.content, input.coverImageUrl, input.published, id]
+    [
+      input.title,
+      slug,
+      input.excerpt,
+      input.content,
+      input.coverImageUrl,
+      input.seoTitle,
+      input.seoDescription,
+      input.ogImageUrl,
+      categories,
+      tags,
+      input.published,
+      id
+    ]
   );
 
   if (result.rowCount === 0) return null;
@@ -384,16 +569,55 @@ const deleteArticle = async (id) => {
   return result.rowCount > 0;
 };
 
+const logAdminAction = async (input) => {
+  const entry = {
+    action: String(input.action || ''),
+    entityType: String(input.entityType || ''),
+    entityId: String(input.entityId || ''),
+    summary: String(input.summary || ''),
+    actor: String(input.actor || ''),
+    createdAt: new Date().toISOString()
+  };
+
+  if (!pool) {
+    inMemoryLogs.unshift({ id: inMemoryLogs.length + 1, ...entry });
+    return;
+  }
+
+  await pool.query(
+    `INSERT INTO admin_activity_logs (action, entity_type, entity_id, summary, actor)
+     VALUES ($1, $2, $3, $4, $5);`,
+    [entry.action, entry.entityType, entry.entityId, entry.summary, entry.actor]
+  );
+};
+
+const listAdminActivity = async (limit = 20) => {
+  const safeLimit = Math.max(1, Math.min(100, Number(limit || 20)));
+  if (!pool) {
+    return inMemoryLogs.slice(0, safeLimit);
+  }
+
+  const result = await pool.query(
+    'SELECT * FROM admin_activity_logs ORDER BY created_at DESC LIMIT $1;',
+    [safeLimit]
+  );
+  return result.rows.map(mapLogRow);
+};
+
 module.exports = {
   DEFAULT_LANDING_CONTENT,
   initStorage,
   getLandingContent,
   updateLandingContent,
   listArticles,
+  getTaxonomies,
   getArticleById,
   getArticleBySlug,
   createArticle,
   updateArticle,
   deleteArticle,
+  isSlugAvailable,
+  logAdminAction,
+  listAdminActivity,
   slugify
 };

@@ -18,7 +18,7 @@
     <main class="admin-main">
       <section class="admin-panel admin-panel-wide">
         <h1>Articles</h1>
-        <p>Cree et gere les articles avec image.</p>
+        <p>Cree, optimise et reference les articles.</p>
         <p id="articleStatus" class="success" hidden>Article enregistre.</p>
 
         <form id="articleForm" class="editor-form" enctype="multipart/form-data">
@@ -32,11 +32,37 @@
           <label class="field">
             <span>Slug (optionnel)</span>
             <input name="slug" type="text" placeholder="auto-genere depuis le titre" />
+            <small class="hint">Slug final: <code id="slugPreview">-</code> <span id="slugState" class="muted"></span></small>
           </label>
 
           <label class="field">
             <span>Resume</span>
             <textarea name="excerpt" rows="2"></textarea>
+          </label>
+
+          <div class="field-row">
+            <label class="field">
+              <span>Categories (separees par des virgules)</span>
+              <input name="categories" type="text" placeholder="Guide, Visa, Budget" />
+            </label>
+            <label class="field">
+              <span>Tags (separes par des virgules)</span>
+              <input name="tags" type="text" placeholder="Bangkok, assurance" />
+            </label>
+          </div>
+
+          <h2>SEO</h2>
+          <label class="field">
+            <span>SEO title</span>
+            <input name="seoTitle" type="text" placeholder="Titre SEO (sinon titre article)" />
+          </label>
+          <label class="field">
+            <span>SEO description</span>
+            <textarea name="seoDescription" rows="2" placeholder="Description SEO (sinon resume)"></textarea>
+          </label>
+          <label class="field">
+            <span>OG image URL (optionnel)</span>
+            <input name="ogImageUrl" type="text" placeholder="https://..." />
           </label>
 
           <label class="field">
@@ -47,11 +73,11 @@
 
           <div class="field-row">
             <label class="field">
-              <span>URL image (optionnel)</span>
+              <span>Image de couverture (URL optionnelle)</span>
               <input name="coverImageUrl" type="text" placeholder="https://..." />
             </label>
             <label class="field">
-              <span>Upload image (max 5MB)</span>
+              <span>Upload image de couverture (max 8MB)</span>
               <input name="coverImage" type="file" accept="image/*" />
             </label>
           </div>
@@ -74,7 +100,16 @@
 
       <section class="admin-panel admin-panel-wide article-list-panel">
         <h2>Liste des articles</h2>
+
+        <div class="filter-row">
+          <input id="searchInput" type="text" placeholder="Recherche plein texte..." />
+          <select id="categoryFilter"><option value="">Toutes categories</option></select>
+          <select id="tagFilter"><option value="">Tous tags</option></select>
+          <button id="runFilterBtn" class="btn btn-ghost" type="button">Filtrer</button>
+        </div>
+
         <div id="articlesList" class="admin-list"></div>
+        <div class="pager-row" id="pagerRow"></div>
       </section>
     </main>
 
@@ -84,6 +119,18 @@
       const statusEl = document.getElementById('articleStatus');
       const listEl = document.getElementById('articlesList');
       const resetBtn = document.getElementById('resetFormBtn');
+      const slugPreviewEl = document.getElementById('slugPreview');
+      const slugStateEl = document.getElementById('slugState');
+      const searchInput = document.getElementById('searchInput');
+      const categoryFilter = document.getElementById('categoryFilter');
+      const tagFilter = document.getElementById('tagFilter');
+      const runFilterBtn = document.getElementById('runFilterBtn');
+      const pagerRow = document.getElementById('pagerRow');
+
+      const draftKey = 'imsexpat_admin_article_draft_v1';
+      let dirty = false;
+      let slugTimer = null;
+      let currentPage = 1;
 
       const quill = new Quill('#contentEditor', {
         theme: 'snow',
@@ -98,6 +145,7 @@
           ]
         }
       });
+
       const toolbar = quill.getModule('toolbar');
 
       const uploadInlineImage = () => {
@@ -114,11 +162,7 @@
           body.append('image', file);
 
           try {
-            const response = await fetch('/api/admin/uploads/image', {
-              method: 'POST',
-              body
-            });
-
+            const response = await fetch('/api/admin/uploads/image', { method: 'POST', body });
             const payload = await response.json().catch(() => ({}));
             if (!response.ok || !payload.url) {
               throw new Error(payload.error || 'Upload image impossible');
@@ -127,25 +171,22 @@
             const range = quill.getSelection(true) || { index: quill.getLength(), length: 0 };
             quill.insertEmbed(range.index, 'image', payload.url, 'user');
             quill.setSelection(range.index + 1, 0);
+            markDirty();
+            saveDraft();
           } catch (error) {
             alert(error.message || 'Upload image impossible');
           }
         };
       };
-
       toolbar.addHandler('image', uploadInlineImage);
 
-      const params = new URLSearchParams(window.location.search);
-      const pendingImage = params.get('insertImage');
-      if (pendingImage) {
-        const range = quill.getSelection(true) || { index: quill.getLength(), length: 0 };
-        quill.insertEmbed(range.index, 'image', pendingImage, 'user');
-        quill.setSelection(range.index + 1, 0);
-        params.delete('insertImage');
-        const next = params.toString();
-        const newUrl = `${window.location.pathname}${next ? `?${next}` : ''}`;
-        window.history.replaceState({}, '', newUrl);
-      }
+      const slugify = (value) => String(value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '')
+        .slice(0, 80) || 'article';
 
       const escapeHtml = (value) => String(value || '')
         .replaceAll('&', '&amp;')
@@ -162,26 +203,141 @@
         }, 1800);
       };
 
+      const getPayloadPreview = () => {
+        const title = form.elements.title.value;
+        const rawSlug = form.elements.slug.value || title;
+        const slug = slugify(rawSlug);
+        const id = Number(form.elements.id.value || 0) || null;
+        return { slug, id };
+      };
+
+      const checkSlug = async () => {
+        const { slug, id } = getPayloadPreview();
+        slugPreviewEl.textContent = slug || '-';
+
+        if (!slug) {
+          slugStateEl.textContent = '';
+          return;
+        }
+
+        const params = new URLSearchParams({ slug });
+        if (id) params.set('excludeId', String(id));
+
+        const response = await fetch(`/api/admin/articles/slug-check?${params.toString()}`, { cache: 'no-store' });
+        if (!response.ok) {
+          slugStateEl.textContent = 'verification indisponible';
+          return;
+        }
+
+        const data = await response.json();
+        slugStateEl.textContent = data.available ? 'disponible' : 'deja pris';
+        slugStateEl.className = data.available ? 'success' : 'error';
+      };
+
+      const scheduleSlugCheck = () => {
+        clearTimeout(slugTimer);
+        slugTimer = setTimeout(() => {
+          checkSlug().catch(() => {
+            slugStateEl.textContent = 'verification indisponible';
+          });
+        }, 250);
+      };
+
+      const saveDraft = () => {
+        const data = {
+          id: form.elements.id.value,
+          title: form.elements.title.value,
+          slug: form.elements.slug.value,
+          excerpt: form.elements.excerpt.value,
+          categories: form.elements.categories.value,
+          tags: form.elements.tags.value,
+          seoTitle: form.elements.seoTitle.value,
+          seoDescription: form.elements.seoDescription.value,
+          ogImageUrl: form.elements.ogImageUrl.value,
+          coverImageUrl: form.elements.coverImageUrl.value,
+          published: form.elements.published.checked,
+          content: quill.root.innerHTML,
+          ts: Date.now()
+        };
+        localStorage.setItem(draftKey, JSON.stringify(data));
+      };
+
+      const loadDraft = () => {
+        const raw = localStorage.getItem(draftKey);
+        if (!raw) return;
+        let draft = null;
+        try {
+          draft = JSON.parse(raw);
+        } catch (_e) {
+          return;
+        }
+        if (!draft || !draft.title) return;
+
+        const apply = window.confirm('Un brouillon local existe. Le charger ?');
+        if (!apply) return;
+
+        form.elements.id.value = draft.id || '';
+        form.elements.title.value = draft.title || '';
+        form.elements.slug.value = draft.slug || '';
+        form.elements.excerpt.value = draft.excerpt || '';
+        form.elements.categories.value = draft.categories || '';
+        form.elements.tags.value = draft.tags || '';
+        form.elements.seoTitle.value = draft.seoTitle || '';
+        form.elements.seoDescription.value = draft.seoDescription || '';
+        form.elements.ogImageUrl.value = draft.ogImageUrl || '';
+        form.elements.coverImageUrl.value = draft.coverImageUrl || '';
+        form.elements.published.checked = Boolean(draft.published);
+        quill.root.innerHTML = draft.content || '<p><br></p>';
+        dirty = true;
+        scheduleSlugCheck();
+      };
+
+      const clearDraft = () => localStorage.removeItem(draftKey);
+
+      const markDirty = () => {
+        dirty = true;
+      };
+
+      const markClean = () => {
+        dirty = false;
+      };
+
       const resetForm = () => {
         form.reset();
         form.elements.id.value = '';
         form.elements.content.value = '';
         quill.setText('');
+        markClean();
+        clearDraft();
+        scheduleSlugCheck();
       };
 
-      const renderList = (articles) => {
-        if (!Array.isArray(articles) || articles.length === 0) {
+      const fillTaxonomies = (taxonomies) => {
+        const categories = taxonomies.categories || [];
+        const tags = taxonomies.tags || [];
+
+        categoryFilter.innerHTML = '<option value="">Toutes categories</option>' + categories.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+        tagFilter.innerHTML = '<option value="">Tous tags</option>' + tags.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+      };
+
+      const renderList = (items, pagination) => {
+        if (!Array.isArray(items) || items.length === 0) {
           listEl.innerHTML = '<p class="muted">Aucun article pour le moment.</p>';
+          pagerRow.innerHTML = '';
           return;
         }
 
-        listEl.innerHTML = articles.map((article) => {
+        listEl.innerHTML = items.map((article) => {
           const state = article.published ? 'Publie' : 'Brouillon';
+          const cat = (article.categories || []).join(', ');
+          const tag = (article.tags || []).join(', ');
           return `
             <article class="list-item">
               <div>
                 <strong>${escapeHtml(article.title)}</strong>
                 <p class="muted">/${escapeHtml(article.slug)} · ${state}</p>
+                ${cat ? `<p class="muted">Categories: ${escapeHtml(cat)}</p>` : ''}
+                ${tag ? `<p class="muted">Tags: ${escapeHtml(tag)}</p>` : ''}
               </div>
               <div class="list-actions">
                 <button class="btn btn-ghost" type="button" data-action="edit" data-id="${article.id}">Modifier</button>
@@ -190,13 +346,34 @@
             </article>
           `;
         }).join('');
+
+        if (!pagination) {
+          pagerRow.innerHTML = '';
+          return;
+        }
+
+        const prevDisabled = pagination.page <= 1 ? 'disabled' : '';
+        const nextDisabled = pagination.page >= pagination.totalPages ? 'disabled' : '';
+
+        pagerRow.innerHTML = `
+          <button class="btn btn-ghost" type="button" data-page="${pagination.page - 1}" ${prevDisabled}>Prec</button>
+          <span class="muted">Page ${pagination.page}/${pagination.totalPages} (${pagination.total})</span>
+          <button class="btn btn-ghost" type="button" data-page="${pagination.page + 1}" ${nextDisabled}>Suiv</button>
+        `;
       };
 
-      const loadArticles = async () => {
-        const response = await fetch('/api/admin/articles', { cache: 'no-store' });
+      const loadArticles = async (page = 1) => {
+        currentPage = page;
+        const params = new URLSearchParams({ page: String(page), pageSize: '12' });
+        if (searchInput.value.trim()) params.set('q', searchInput.value.trim());
+        if (categoryFilter.value) params.set('category', categoryFilter.value);
+        if (tagFilter.value) params.set('tag', tagFilter.value);
+
+        const response = await fetch(`/api/admin/articles?${params.toString()}`, { cache: 'no-store' });
         if (!response.ok) throw new Error('Impossible de charger les articles');
         const data = await response.json();
-        renderList(data);
+        fillTaxonomies(data.taxonomies || { categories: [], tags: [] });
+        renderList(data.items || [], data.pagination);
       };
 
       const loadOne = async (id) => {
@@ -208,9 +385,17 @@
         form.elements.title.value = article.title || '';
         form.elements.slug.value = article.slug || '';
         form.elements.excerpt.value = article.excerpt || '';
+        form.elements.categories.value = (article.categories || []).join(', ');
+        form.elements.tags.value = (article.tags || []).join(', ');
+        form.elements.seoTitle.value = article.seoTitle || '';
+        form.elements.seoDescription.value = article.seoDescription || '';
+        form.elements.ogImageUrl.value = article.ogImageUrl || '';
         quill.root.innerHTML = article.content || '<p><br></p>';
         form.elements.coverImageUrl.value = article.coverImageUrl || '';
         form.elements.published.checked = Boolean(article.published);
+        markClean();
+        saveDraft();
+        scheduleSlugCheck();
       };
 
       const deleteOne = async (id) => {
@@ -244,9 +429,13 @@
           return;
         }
 
+        const out = await response.json();
         setStatus('Article enregistre.');
-        resetForm();
-        await loadArticles();
+        form.elements.id.value = String(out.article && out.article.id ? out.article.id : form.elements.id.value || '');
+        markClean();
+        clearDraft();
+        await loadArticles(currentPage);
+        scheduleSlugCheck();
       });
 
       listEl.addEventListener('click', async (event) => {
@@ -267,18 +456,72 @@
           deleteOne(id)
             .then(async () => {
               setStatus('Article supprime.');
-              resetForm();
-              await loadArticles();
+              if (String(form.elements.id.value) === String(id)) {
+                resetForm();
+              }
+              await loadArticles(currentPage);
             })
             .catch((error) => alert(error.message));
         }
       });
 
+      pagerRow.addEventListener('click', (event) => {
+        const page = Number(event.target.getAttribute('data-page') || 0);
+        if (!page || page < 1) return;
+        loadArticles(page).catch((error) => alert(error.message));
+      });
+
+      runFilterBtn.addEventListener('click', () => {
+        loadArticles(1).catch((error) => alert(error.message));
+      });
+
+      [form.elements.title, form.elements.slug].forEach((el) => {
+        el.addEventListener('input', () => {
+          markDirty();
+          saveDraft();
+          scheduleSlugCheck();
+        });
+      });
+
+      ['excerpt', 'categories', 'tags', 'seoTitle', 'seoDescription', 'ogImageUrl', 'coverImageUrl'].forEach((name) => {
+        form.elements[name].addEventListener('input', () => {
+          markDirty();
+          saveDraft();
+        });
+      });
+
+      form.elements.published.addEventListener('change', () => {
+        markDirty();
+        saveDraft();
+      });
+
+      quill.on('text-change', () => {
+        markDirty();
+        saveDraft();
+      });
+
       resetBtn.addEventListener('click', () => resetForm());
 
-      loadArticles().catch((error) => {
-        alert(error.message);
+      window.addEventListener('beforeunload', (event) => {
+        if (!dirty) return;
+        event.preventDefault();
+        event.returnValue = '';
       });
+
+      const params = new URLSearchParams(window.location.search);
+      const pendingImage = params.get('insertImage');
+      if (pendingImage) {
+        const range = quill.getSelection(true) || { index: quill.getLength(), length: 0 };
+        quill.insertEmbed(range.index, 'image', pendingImage, 'user');
+        quill.setSelection(range.index + 1, 0);
+        params.delete('insertImage');
+        const next = params.toString();
+        window.history.replaceState({}, '', `${window.location.pathname}${next ? `?${next}` : ''}`);
+      }
+
+      loadDraft();
+      scheduleSlugCheck();
+      loadArticles(1).catch((error) => alert(error.message));
     </script>
   </body>
 </html>

@@ -57,8 +57,14 @@ Tous les textes de la landing sont modifiables depuis cette page.
 ## Articles et images
 
 - CRUD articles dans `/admin/articles` (titre, slug, resume, contenu, statut publie).
-- Upload image de couverture (max 5MB, formats image).
+- Categories + tags.
+- SEO article (`seoTitle`, `seoDescription`, `ogImageUrl`).
+- Upload image de couverture (max 8MB, compression et redimensionnement auto).
 - Bibliotheque d'uploads avec drag-and-drop et insertion rapide dans l'editeur.
+- Autosave brouillon local + alerte en quittant une page non sauvegardee.
+- Verification de disponibilite du slug.
+- Recherche + filtres + pagination sur `/articles`.
+- Journal d'activite admin (`/api/admin/activity`).
 - Listing public: `/articles`
 - Detail public: `/article/:slug`
 

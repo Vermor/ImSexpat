@@ -128,10 +128,10 @@
 
       const loadLatestArticles = async () => {
         try {
-          const response = await fetch('/api/articles', { cache: 'no-store' });
+          const response = await fetch('/api/articles?page=1&pageSize=6', { cache: 'no-store' });
           if (!response.ok) throw new Error('Failed to load articles');
-          const articles = await response.json();
-          renderLatestArticles(articles);
+          const payload = await response.json();
+          renderLatestArticles(payload.items || []);
         } catch (error) {
           const listEl = document.getElementById('latestArticles');
           if (listEl) {

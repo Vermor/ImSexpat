@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Article | ImSexpat</title>
+    <meta name="description" content="" />
+    <meta property="og:title" content="" />
+    <meta property="og:description" content="" />
+    <meta property="og:image" content="" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -29,6 +33,12 @@
       const excerptEl = document.getElementById('excerpt');
       const contentEl = document.getElementById('content');
       const coverEl = document.getElementById('cover');
+      const setMeta = (selector, value) => {
+        const el = document.querySelector(selector);
+        if (el) {
+          el.setAttribute('content', value || '');
+        }
+      };
 
       fetch(`/api/articles/${encodeURIComponent(slug)}`, { cache: 'no-store' })
         .then((res) => {
@@ -38,6 +48,11 @@
         .then((article) => {
           titleEl.textContent = article.title;
           excerptEl.textContent = article.excerpt || '';
+          document.title = article.seoTitle || article.title || 'Article | ImSexpat';
+          setMeta('meta[name=\"description\"]', article.seoDescription || article.excerpt || '');
+          setMeta('meta[property=\"og:title\"]', article.seoTitle || article.title || '');
+          setMeta('meta[property=\"og:description\"]', article.seoDescription || article.excerpt || '');
+          setMeta('meta[property=\"og:image\"]', article.ogImageUrl || article.coverImageUrl || '');
 
           if (article.coverImageUrl) {
             coverEl.src = article.coverImageUrl;

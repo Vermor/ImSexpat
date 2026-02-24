@@ -15,35 +15,92 @@
     <main>
       <section class="admin-panel admin-panel-wide">
         <h1>Articles</h1>
+        <div class="filter-row">
+          <input id="q" type="text" placeholder="Recherche..." />
+          <select id="category"><option value="">Toutes categories</option></select>
+          <select id="tag"><option value="">Tous tags</option></select>
+          <button id="apply" class="btn btn-ghost" type="button">Filtrer</button>
+        </div>
         <div id="publicArticles" class="admin-list"></div>
+        <div class="pager-row" id="pagerRow"></div>
       </section>
     </main>
 
     <script>
       const listEl = document.getElementById('publicArticles');
+      const pagerEl = document.getElementById('pagerRow');
+      const qEl = document.getElementById('q');
+      const categoryEl = document.getElementById('category');
+      const tagEl = document.getElementById('tag');
+      const applyEl = document.getElementById('apply');
 
-      const render = (articles) => {
+      const escapeHtml = (value) => String(value || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+
+      const fillTaxonomies = (tax) => {
+        const categories = tax.categories || [];
+        const tags = tax.tags || [];
+        categoryEl.innerHTML = '<option value="">Toutes categories</option>' + categories.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+        tagEl.innerHTML = '<option value="">Tous tags</option>' + tags.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+      };
+
+      const render = (articles, pagination) => {
         if (!articles.length) {
           listEl.innerHTML = '<p class="muted">Aucun article publie.</p>';
+          pagerEl.innerHTML = '';
           return;
         }
 
         listEl.innerHTML = articles.map((article) => `
           <article class="list-item vertical-item">
             <div>
-              <h2><a href="/article/${article.slug}">${article.title}</a></h2>
-              <p class="muted">${article.excerpt || ''}</p>
+              <h2><a href="/article/${encodeURIComponent(article.slug)}">${escapeHtml(article.title)}</a></h2>
+              <p class="muted">${escapeHtml(article.excerpt || '')}</p>
             </div>
           </article>
         `).join('');
+
+        const prevDisabled = pagination.page <= 1 ? 'disabled' : '';
+        const nextDisabled = pagination.page >= pagination.totalPages ? 'disabled' : '';
+        pagerEl.innerHTML = `
+          <button class="btn btn-ghost" type="button" data-page="${pagination.page - 1}" ${prevDisabled}>Prec</button>
+          <span class="muted">Page ${pagination.page}/${pagination.totalPages}</span>
+          <button class="btn btn-ghost" type="button" data-page="${pagination.page + 1}" ${nextDisabled}>Suiv</button>
+        `;
       };
 
-      fetch('/api/articles', { cache: 'no-store' })
-        .then((res) => res.json())
-        .then((data) => render(Array.isArray(data) ? data : []))
-        .catch(() => {
-          listEl.innerHTML = '<p class="error">Erreur de chargement des articles.</p>';
+      const load = async (page = 1) => {
+        const params = new URLSearchParams({ page: String(page), pageSize: '9' });
+        if (qEl.value.trim()) params.set('q', qEl.value.trim());
+        if (categoryEl.value) params.set('category', categoryEl.value);
+        if (tagEl.value) params.set('tag', tagEl.value);
+
+        const res = await fetch(`/api/articles?${params.toString()}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error('Erreur de chargement des articles.');
+        const data = await res.json();
+        fillTaxonomies(data.taxonomies || { categories: [], tags: [] });
+        render(data.items || [], data.pagination || { page: 1, totalPages: 1 });
+      };
+
+      applyEl.addEventListener('click', () => load(1).catch((error) => {
+        listEl.innerHTML = `<p class="error">${error.message}</p>`;
+      }));
+
+      pagerEl.addEventListener('click', (event) => {
+        const page = Number(event.target.getAttribute('data-page') || 0);
+        if (!page || page < 1) return;
+        load(page).catch((error) => {
+          listEl.innerHTML = `<p class="error">${error.message}</p>`;
         });
+      });
+
+      load(1).catch((error) => {
+        listEl.innerHTML = `<p class="error">${error.message}</p>`;
+      });
     </script>
   </body>
 </html>

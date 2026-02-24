@@ -3,6 +3,7 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
 const sanitizeHtml = require('sanitize-html');
+const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs');
 const {
@@ -11,11 +12,15 @@ const {
   getLandingContent,
   updateLandingContent,
   listArticles,
+  getTaxonomies,
   getArticleById,
   getArticleBySlug,
   createArticle,
   updateArticle,
   deleteArticle,
+  isSlugAvailable,
+  logAdminAction,
+  listAdminActivity,
   slugify
 } = require('./storage');
 
@@ -32,12 +37,9 @@ if (!fs.existsSync(uploadsDir)) {
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadsDir),
-    filename: (req, file, cb) => {
-      const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
-      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
-    }
+    filename: (req, file, cb) => cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}.jpg`)
   }),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 8 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if ((file.mimetype || '').startsWith('image/')) {
       cb(null, true);
@@ -49,15 +51,27 @@ const upload = multer({
 
 const isSafeUploadName = (name) => /^[a-zA-Z0-9._-]+$/.test(name || '');
 
+const optimizeUploadedImage = async (fullPath) => {
+  const tempPath = `${fullPath}.tmp`;
+  await sharp(fullPath)
+    .rotate()
+    .resize({ width: 1600, withoutEnlargement: true })
+    .jpeg({ quality: 82, mozjpeg: true })
+    .toFile(tempPath);
+  await fs.promises.rename(tempPath, fullPath);
+};
+
 const uploadFileToStorage = async (file) => {
   if (!file) return null;
+  await optimizeUploadedImage(file.path);
 
+  const stat = await fs.promises.stat(file.path);
   return {
     id: file.filename,
     name: file.filename,
     url: `/uploads/${file.filename}`,
-    size: file.size,
-    updatedAt: new Date().toISOString()
+    size: stat.size,
+    updatedAt: stat.mtime.toISOString()
   };
 };
 
@@ -86,9 +100,7 @@ const deleteUploadFile = async (id) => {
     error.statusCode = 400;
     throw error;
   }
-
-  const target = path.join(uploadsDir, id);
-  await fs.promises.unlink(target);
+  await fs.promises.unlink(path.join(uploadsDir, id));
 };
 
 app.use(express.urlencoded({ extended: false }));
@@ -100,9 +112,7 @@ app.get('/health', (req, res) => {
 });
 
 app.use((req, res, next) => {
-  if (req.path === '/health') {
-    return next();
-  }
+  if (req.path === '/health') return next();
   const host = (req.headers.host || '').toLowerCase();
   const targetHost = primaryDomain.toLowerCase();
 
@@ -117,9 +127,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const requireAdminPasswordConfig = (req, res, next) => {
   if (!process.env.ADMIN_PASSWORD) {
-    return res
-      .status(500)
-      .send('ADMIN_PASSWORD is missing. Set it in environment variables.');
+    return res.status(500).send('ADMIN_PASSWORD is missing. Set it in environment variables.');
   }
   return next();
 };
@@ -131,9 +139,13 @@ const protectAdmin = [requireAdminPasswordConfig, (req, res, next) => {
   return res.redirect('/admin/login');
 }];
 
-const sanitizeText = (value, maxLength) => {
-  const text = String(value ?? '').trim();
-  return text.slice(0, maxLength);
+const sanitizeText = (value, maxLength) => String(value ?? '').trim().slice(0, maxLength);
+
+const toCommaList = (value, maxLength = 400) => {
+  if (Array.isArray(value)) {
+    return value.map((x) => String(x || '').trim()).filter(Boolean).join(',').slice(0, maxLength);
+  }
+  return sanitizeText(value, maxLength);
 };
 
 const normalizeLandingPayload = (payload) => ({
@@ -187,27 +199,29 @@ const normalizeArticlePayload = (payload, uploadedCoverUrl, currentCover = '') =
     }
   });
 
+  const seoTitle = sanitizeText(payload.seoTitle, 180) || sanitizeText(payload.title, 180);
+  const seoDescription = sanitizeText(payload.seoDescription, 320) || sanitizeText(payload.excerpt, 320);
+
   return {
     title: sanitizeText(payload.title, 180),
     slug: slugify(sanitizeText(payload.slug, 180) || sanitizeText(payload.title, 180)),
     excerpt: sanitizeText(payload.excerpt, 400),
-    content: safeContent.slice(0, 30000),
+    content: safeContent.slice(0, 50000),
     coverImageUrl: nextCover,
+    seoTitle,
+    seoDescription,
+    ogImageUrl: sanitizeText(payload.ogImageUrl, 300) || nextCover,
+    categories: toCommaList(payload.categories, 400),
+    tags: toCommaList(payload.tags, 400),
     published
   };
 };
 
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+const actorFromReq = (req) => sanitizeText(req.headers['x-forwarded-for'] || req.ip || 'admin', 160);
 
-app.get('/articles', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'articles.html'));
-});
-
-app.get('/article/:slug', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'article.html'));
-});
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/articles', (req, res) => res.sendFile(path.join(__dirname, 'public', 'articles.html')));
+app.get('/article/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'article.html')));
 
 app.get('/api/landing', async (req, res) => {
   try {
@@ -221,17 +235,20 @@ app.get('/api/landing', async (req, res) => {
 
 app.get('/api/articles', async (req, res) => {
   try {
-    const rows = await listArticles();
-    const published = rows.filter((a) => a.published).map((a) => ({
-      id: a.id,
-      title: a.title,
-      slug: a.slug,
-      excerpt: a.excerpt,
-      coverImageUrl: a.coverImageUrl,
-      createdAt: a.createdAt,
-      updatedAt: a.updatedAt
-    }));
-    res.json(published);
+    const result = await listArticles({
+      page: req.query.page,
+      pageSize: req.query.pageSize,
+      q: req.query.q,
+      category: req.query.category,
+      tag: req.query.tag,
+      publishedOnly: true
+    });
+    const taxonomies = await getTaxonomies();
+    res.json({
+      items: result.items,
+      pagination: result.pagination,
+      taxonomies
+    });
   } catch (error) {
     console.error('Failed to list public articles:', error);
     res.status(500).json({ error: 'Failed to list articles' });
@@ -241,10 +258,7 @@ app.get('/api/articles', async (req, res) => {
 app.get('/api/articles/:slug', async (req, res) => {
   try {
     const article = await getArticleBySlug(req.params.slug);
-    if (!article) {
-      res.status(404).json({ error: 'Article not found' });
-      return;
-    }
+    if (!article) return res.status(404).json({ error: 'Article not found' });
     res.json(article);
   } catch (error) {
     console.error('Failed to load article:', error);
@@ -253,18 +267,13 @@ app.get('/api/articles/:slug', async (req, res) => {
 });
 
 app.get('/admin/login', requireAdminPasswordConfig, (req, res) => {
-  if (isAuthenticated(req)) {
-    return res.redirect('/admin');
-  }
+  if (isAuthenticated(req)) return res.redirect('/admin');
   return res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
 app.post('/admin/login', requireAdminPasswordConfig, (req, res) => {
   const password = (req.body.password || '').trim();
-
-  if (password !== process.env.ADMIN_PASSWORD) {
-    return res.redirect('/admin/login?error=1');
-  }
+  if (password !== process.env.ADMIN_PASSWORD) return res.redirect('/admin/login?error=1');
 
   res.cookie('admin_auth', 'ok', {
     httpOnly: true,
@@ -282,21 +291,10 @@ app.post('/admin/logout', (req, res) => {
   res.redirect('/admin/login');
 });
 
-app.get('/admin', protectAdmin, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-});
-
-app.get('/admin/landing', protectAdmin, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin-landing.html'));
-});
-
-app.get('/admin/articles', protectAdmin, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin-articles.html'));
-});
-
-app.get('/admin/media', protectAdmin, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin-media.html'));
-});
+app.get('/admin', protectAdmin, (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+app.get('/admin/landing', protectAdmin, (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin-landing.html')));
+app.get('/admin/articles', protectAdmin, (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin-articles.html')));
+app.get('/admin/media', protectAdmin, (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin-media.html')));
 
 app.get('/api/admin/landing', protectAdmin, async (req, res) => {
   try {
@@ -312,6 +310,13 @@ app.post('/api/admin/landing', protectAdmin, async (req, res) => {
   try {
     const payload = normalizeLandingPayload(req.body || {});
     const saved = await updateLandingContent(payload);
+    await logAdminAction({
+      action: 'landing.update',
+      entityType: 'landing',
+      entityId: '1',
+      summary: `Landing updated: ${payload.pageTitle}`,
+      actor: actorFromReq(req)
+    });
     res.json({ ok: true, content: saved });
   } catch (error) {
     console.error('Failed to save landing content:', error);
@@ -319,10 +324,53 @@ app.post('/api/admin/landing', protectAdmin, async (req, res) => {
   }
 });
 
+app.get('/api/admin/taxonomies', protectAdmin, async (req, res) => {
+  try {
+    const tax = await getTaxonomies();
+    res.json(tax);
+  } catch (error) {
+    console.error('Failed to load taxonomies:', error);
+    res.status(500).json({ error: 'Failed to load taxonomies' });
+  }
+});
+
+app.get('/api/admin/activity', protectAdmin, async (req, res) => {
+  try {
+    const limit = Number(req.query.limit || 20);
+    const logs = await listAdminActivity(limit);
+    res.json(logs);
+  } catch (error) {
+    console.error('Failed to list activity logs:', error);
+    res.status(500).json({ error: 'Failed to list activity logs' });
+  }
+});
+
+app.get('/api/admin/articles/slug-check', protectAdmin, async (req, res) => {
+  try {
+    const slug = sanitizeText(req.query.slug, 180);
+    const excludeId = Number(req.query.excludeId || 0) || null;
+    if (!slug) return res.status(400).json({ error: 'Missing slug' });
+    const normalized = slugify(slug);
+    const available = await isSlugAvailable(normalized, excludeId);
+    res.json({ slug: normalized, available });
+  } catch (error) {
+    console.error('Failed to check slug:', error);
+    res.status(500).json({ error: 'Failed to check slug' });
+  }
+});
+
 app.get('/api/admin/articles', protectAdmin, async (req, res) => {
   try {
-    const rows = await listArticles();
-    res.json(rows);
+    const result = await listArticles({
+      page: req.query.page,
+      pageSize: req.query.pageSize || 25,
+      q: req.query.q,
+      category: req.query.category,
+      tag: req.query.tag,
+      publishedOnly: false
+    });
+    const taxonomies = await getTaxonomies();
+    res.json({ items: result.items, pagination: result.pagination, taxonomies });
   } catch (error) {
     console.error('Failed to list admin articles:', error);
     res.status(500).json({ error: 'Failed to list admin articles' });
@@ -332,17 +380,9 @@ app.get('/api/admin/articles', protectAdmin, async (req, res) => {
 app.get('/api/admin/articles/:id', protectAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) {
-      res.status(400).json({ error: 'Invalid article id' });
-      return;
-    }
-
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid article id' });
     const article = await getArticleById(id);
-    if (!article) {
-      res.status(404).json({ error: 'Article not found' });
-      return;
-    }
-
+    if (!article) return res.status(404).json({ error: 'Article not found' });
     res.json(article);
   } catch (error) {
     console.error('Failed to load admin article:', error);
@@ -362,8 +402,18 @@ app.get('/api/admin/uploads', protectAdmin, async (req, res) => {
 
 app.post('/api/admin/uploads', protectAdmin, upload.any(), (req, res) => {
   Promise.all((req.files || []).map((file) => uploadFileToStorage(file)))
-    .then((files) => {
-      res.json({ ok: true, files: files.filter(Boolean) });
+    .then(async (files) => {
+      const safeFiles = files.filter(Boolean);
+      if (safeFiles.length > 0) {
+        await logAdminAction({
+          action: 'media.upload',
+          entityType: 'media',
+          entityId: String(safeFiles.length),
+          summary: `Uploaded ${safeFiles.length} media file(s)`,
+          actor: actorFromReq(req)
+        });
+      }
+      res.json({ ok: true, files: safeFiles });
     })
     .catch((error) => {
       console.error('Failed to upload files:', error);
@@ -379,55 +429,50 @@ app.post('/api/admin/articles', protectAdmin, upload.single('coverImage'), async
     const uploadedCoverUrl = uploadedCover ? uploadedCover.url : '';
 
     if (idValue && (!Number.isInteger(id) || id <= 0)) {
-      res.status(400).json({ error: 'Invalid article id' });
-      return;
+      return res.status(400).json({ error: 'Invalid article id' });
     }
 
     if (id) {
       const current = await getArticleById(id);
-      if (!current) {
-        res.status(404).json({ error: 'Article not found' });
-        return;
-      }
+      if (!current) return res.status(404).json({ error: 'Article not found' });
 
       const payload = normalizeArticlePayload(req.body, uploadedCoverUrl, current.coverImageUrl);
-      if (!payload.title) {
-        res.status(400).json({ error: 'Title is required' });
-        return;
-      }
+      if (!payload.title) return res.status(400).json({ error: 'Title is required' });
 
       const updated = await updateArticle(id, payload);
-      res.json({ ok: true, article: updated });
-      return;
+      await logAdminAction({
+        action: 'article.update',
+        entityType: 'article',
+        entityId: String(id),
+        summary: `Article updated: ${payload.title}`,
+        actor: actorFromReq(req)
+      });
+      return res.json({ ok: true, article: updated });
     }
 
     const payload = normalizeArticlePayload(req.body, uploadedCoverUrl);
-    if (!payload.title) {
-      res.status(400).json({ error: 'Title is required' });
-      return;
-    }
+    if (!payload.title) return res.status(400).json({ error: 'Title is required' });
 
     const created = await createArticle(payload);
-    res.json({ ok: true, article: created });
+    await logAdminAction({
+      action: 'article.create',
+      entityType: 'article',
+      entityId: String(created.id),
+      summary: `Article created: ${payload.title}`,
+      actor: actorFromReq(req)
+    });
+    return res.json({ ok: true, article: created });
   } catch (error) {
     console.error('Failed to save article:', error);
-    res.status(500).json({ error: 'Failed to save article' });
+    return res.status(500).json({ error: 'Failed to save article' });
   }
 });
 
 app.post('/api/admin/uploads/image', protectAdmin, upload.single('image'), (req, res) => {
-  if (!req.file) {
-    res.status(400).json({ error: 'Image file is required' });
-    return;
-  }
+  if (!req.file) return res.status(400).json({ error: 'Image file is required' });
 
   uploadFileToStorage(req.file)
-    .then((stored) => {
-      res.json({
-        ok: true,
-        url: stored ? stored.url : ''
-      });
-    })
+    .then((stored) => res.json({ ok: true, url: stored ? stored.url : '' }))
     .catch((error) => {
       console.error('Failed to upload inline image:', error);
       res.status(500).json({ error: 'Failed to upload image' });
@@ -437,54 +482,53 @@ app.post('/api/admin/uploads/image', protectAdmin, upload.single('image'), (req,
 app.delete('/api/admin/uploads', protectAdmin, async (req, res) => {
   try {
     const id = sanitizeText(req.query.id, 300);
-    if (!id) {
-      res.status(400).json({ error: 'Missing file id' });
-      return;
-    }
+    if (!id) return res.status(400).json({ error: 'Missing file id' });
 
     await deleteUploadFile(id);
-    res.json({ ok: true });
+    await logAdminAction({
+      action: 'media.delete',
+      entityType: 'media',
+      entityId: id,
+      summary: `Media deleted: ${id}`,
+      actor: actorFromReq(req)
+    });
+    return res.json({ ok: true });
   } catch (error) {
-    if (error && error.code === 'ENOENT') {
-      res.status(404).json({ error: 'File not found' });
-      return;
-    }
-    if (error && error.statusCode === 400) {
-      res.status(400).json({ error: error.message });
-      return;
-    }
+    if (error && error.code === 'ENOENT') return res.status(404).json({ error: 'File not found' });
+    if (error && error.statusCode === 400) return res.status(400).json({ error: error.message });
     console.error('Failed to delete upload:', error);
-    res.status(500).json({ error: 'Failed to delete upload' });
+    return res.status(500).json({ error: 'Failed to delete upload' });
   }
 });
 
 app.delete('/api/admin/articles/:id', protectAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) {
-      res.status(400).json({ error: 'Invalid article id' });
-      return;
-    }
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid article id' });
 
     const removed = await deleteArticle(id);
-    if (!removed) {
-      res.status(404).json({ error: 'Article not found' });
-      return;
-    }
+    if (!removed) return res.status(404).json({ error: 'Article not found' });
 
-    res.json({ ok: true });
+    await logAdminAction({
+      action: 'article.delete',
+      entityType: 'article',
+      entityId: String(id),
+      summary: `Article deleted: ${id}`,
+      actor: actorFromReq(req)
+    });
+
+    return res.json({ ok: true });
   } catch (error) {
     console.error('Failed to delete article:', error);
-    res.status(500).json({ error: 'Failed to delete article' });
+    return res.status(500).json({ error: 'Failed to delete article' });
   }
 });
 
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError || error.message === 'Only image files are allowed') {
-    res.status(400).json({ error: error.message });
-    return;
+    return res.status(400).json({ error: error.message });
   }
-  next(error);
+  return next(error);
 });
 
 const start = async () => {
