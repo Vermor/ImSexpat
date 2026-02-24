@@ -183,6 +183,9 @@ const initStorage = async () => {
   pool = createPool();
 
   if (!pool) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('DATABASE_URL is missing in production. Refusing to start without PostgreSQL.');
+    }
     console.warn('DATABASE_URL missing: using in-memory storage for landing and articles.');
     return;
   }
