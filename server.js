@@ -47,6 +47,26 @@ const upload = multer({
   }
 });
 
+const isSafeUploadName = (name) => /^[a-zA-Z0-9._-]+$/.test(name || '');
+
+const listUploadFiles = async () => {
+  const entries = await fs.promises.readdir(uploadsDir, { withFileTypes: true });
+  const files = await Promise.all(entries
+    .filter((entry) => entry.isFile() && entry.name !== '.gitkeep')
+    .map(async (entry) => {
+      const fullPath = path.join(uploadsDir, entry.name);
+      const stat = await fs.promises.stat(fullPath);
+      return {
+        name: entry.name,
+        url: `/uploads/${entry.name}`,
+        size: stat.size,
+        updatedAt: stat.mtime.toISOString()
+      };
+    }));
+
+  return files.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+};
+
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(cookieParser(process.env.COOKIE_SECRET || 'local-dev-secret'));
@@ -245,6 +265,10 @@ app.get('/admin/articles', protectAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin-articles.html'));
 });
 
+app.get('/admin/media', protectAdmin, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin-media.html'));
+});
+
 app.get('/api/admin/landing', protectAdmin, async (req, res) => {
   try {
     const content = await getLandingContent();
@@ -295,6 +319,25 @@ app.get('/api/admin/articles/:id', protectAdmin, async (req, res) => {
     console.error('Failed to load admin article:', error);
     res.status(500).json({ error: 'Failed to load admin article' });
   }
+});
+
+app.get('/api/admin/uploads', protectAdmin, async (req, res) => {
+  try {
+    const files = await listUploadFiles();
+    res.json(files);
+  } catch (error) {
+    console.error('Failed to list uploads:', error);
+    res.status(500).json({ error: 'Failed to list uploads' });
+  }
+});
+
+app.post('/api/admin/uploads', protectAdmin, upload.array('image', 20), (req, res) => {
+  const files = (req.files || []).map((file) => ({
+    name: file.filename,
+    url: `/uploads/${file.filename}`,
+    size: file.size
+  }));
+  res.json({ ok: true, files });
 });
 
 app.post('/api/admin/articles', protectAdmin, upload.single('coverImage'), async (req, res) => {
@@ -349,6 +392,27 @@ app.post('/api/admin/uploads/image', protectAdmin, upload.single('image'), (req,
     ok: true,
     url: `/uploads/${req.file.filename}`
   });
+});
+
+app.delete('/api/admin/uploads/:name', protectAdmin, async (req, res) => {
+  try {
+    const name = req.params.name;
+    if (!isSafeUploadName(name)) {
+      res.status(400).json({ error: 'Invalid file name' });
+      return;
+    }
+
+    const target = path.join(uploadsDir, name);
+    await fs.promises.unlink(target);
+    res.json({ ok: true });
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
+    console.error('Failed to delete upload:', error);
+    res.status(500).json({ error: 'Failed to delete upload' });
+  }
 });
 
 app.delete('/api/admin/articles/:id', protectAdmin, async (req, res) => {

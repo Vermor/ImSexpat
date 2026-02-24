@@ -264,7 +264,7 @@ textarea {
 
 .admin-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.9rem;
 }
 
@@ -330,6 +330,65 @@ textarea {
   line-height: 1.6;
 }
 
+.media-dropzone {
+  margin-top: 0.8rem;
+  border: 2px dashed var(--line);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.media-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.media-grid {
+  margin-top: 0.8rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.media-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.media-card img {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  display: block;
+  background: #f0f0f0;
+}
+
+.media-meta {
+  padding: 0.6rem 0.8rem 0.2rem;
+}
+
+.media-meta strong {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.media-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+  padding: 0.65rem;
+}
+
+.media-actions .btn {
+  width: 100%;
+}
+
 @keyframes rise {
   from {
     opacity: 0;
@@ -344,7 +403,9 @@ textarea {
 @media (max-width: 760px) {
   .grid,
   .admin-grid,
-  .field-row {
+  .field-row,
+  .media-grid,
+  .media-actions {
     grid-template-columns: 1fr;
   }
 

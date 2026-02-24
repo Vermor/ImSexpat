@@ -41,6 +41,7 @@ Au demarrage, l'app cree automatiquement les tables `landing_content` et `articl
 - Dashboard admin: `/admin`
 - Editeur landing: `/admin/landing`
 - Editeur articles: `/admin/articles`
+- Bibliotheque media: `/admin/media`
 
 Tous les textes de la landing sont modifiables depuis cette page.
 
@@ -48,6 +49,7 @@ Tous les textes de la landing sont modifiables depuis cette page.
 
 - CRUD articles dans `/admin/articles` (titre, slug, resume, contenu, statut publie).
 - Upload image de couverture (max 5MB, formats image).
+- Bibliotheque d'uploads avec drag-and-drop et insertion rapide dans l'editeur.
 - Listing public: `/articles`
 - Detail public: `/article/:slug`
 

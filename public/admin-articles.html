@@ -64,6 +64,7 @@
           <div class="editor-actions">
             <div class="editor-actions-left">
               <a href="/admin" class="btn btn-ghost">Retour admin</a>
+              <a href="/admin/media" class="btn btn-ghost">Bibliotheque media</a>
               <button id="resetFormBtn" class="btn btn-ghost" type="button">Nouveau</button>
             </div>
             <button class="btn btn-primary" type="submit">Enregistrer</button>
@@ -133,6 +134,18 @@
       };
 
       toolbar.addHandler('image', uploadInlineImage);
+
+      const params = new URLSearchParams(window.location.search);
+      const pendingImage = params.get('insertImage');
+      if (pendingImage) {
+        const range = quill.getSelection(true) || { index: quill.getLength(), length: 0 };
+        quill.insertEmbed(range.index, 'image', pendingImage, 'user');
+        quill.setSelection(range.index + 1, 0);
+        params.delete('insertImage');
+        const next = params.toString();
+        const newUrl = `${window.location.pathname}${next ? `?${next}` : ''}`;
+        window.history.replaceState({}, '', newUrl);
+      }
 
       const escapeHtml = (value) => String(value || '')
         .replaceAll('&', '&amp;')

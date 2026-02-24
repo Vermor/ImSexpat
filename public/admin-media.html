@@ -1,0 +1,163 @@
+﻿<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Media | ImSexpat</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dropzone@6.0.0-beta.2/dist/dropzone.css" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="admin-body">
+    <header class="site-header">
+      <div class="brand">IMSEXPAT MEDIA</div>
+      <form method="post" action="/admin/logout">
+        <button class="btn btn-ghost" type="submit">Se deconnecter</button>
+      </form>
+    </header>
+
+    <main class="admin-main">
+      <section class="admin-panel admin-panel-wide">
+        <h1>Bibliotheque Media</h1>
+        <p>Upload, consultation et reutilisation des images.</p>
+        <form id="mediaDropzone" class="dropzone media-dropzone"></form>
+        <p id="mediaStatus" class="success" hidden>Upload termine.</p>
+      </section>
+
+      <section class="admin-panel admin-panel-wide article-list-panel">
+        <div class="media-header">
+          <h2>Tous les uploads</h2>
+          <a class="btn btn-ghost" href="/admin/articles">Ouvrir l'editeur d'articles</a>
+        </div>
+        <div id="mediaGrid" class="media-grid"></div>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/dropzone@6.0.0-beta.2/dist/dropzone-min.js"></script>
+    <script>
+      const statusEl = document.getElementById('mediaStatus');
+      const gridEl = document.getElementById('mediaGrid');
+
+      const showStatus = (message) => {
+        statusEl.textContent = message;
+        statusEl.hidden = false;
+        setTimeout(() => {
+          statusEl.hidden = true;
+        }, 1600);
+      };
+
+      const copyText = async (value) => {
+        await navigator.clipboard.writeText(value);
+        showStatus('Copie dans le presse-papier.');
+      };
+
+      const formatBytes = (bytes) => {
+        if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB'];
+        const idx = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+        const num = bytes / (1024 ** idx);
+        return `${num.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`;
+      };
+
+      const renderMedia = (files) => {
+        if (!Array.isArray(files) || files.length === 0) {
+          gridEl.innerHTML = '<p class="muted">Aucune image upload pour le moment.</p>';
+          return;
+        }
+
+        gridEl.innerHTML = files.map((file) => `
+          <article class="media-card">
+            <img src="${file.url}" alt="${file.name}" loading="lazy" />
+            <div class="media-meta">
+              <strong title="${file.name}">${file.name}</strong>
+              <p class="muted">${formatBytes(file.size)}</p>
+            </div>
+            <div class="media-actions">
+              <button class="btn btn-ghost" type="button" data-action="copy-url" data-url="${file.url}">Copier URL</button>
+              <button class="btn btn-ghost" type="button" data-action="copy-code" data-url="${file.url}">Copier IMG</button>
+              <a class="btn btn-ghost" href="/admin/articles?insertImage=${encodeURIComponent(file.url)}">Utiliser</a>
+              <button class="btn btn-ghost" type="button" data-action="delete" data-name="${file.name}">Supprimer</button>
+            </div>
+          </article>
+        `).join('');
+      };
+
+      const loadMedia = async () => {
+        const response = await fetch('/api/admin/uploads', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Chargement des uploads impossible');
+        const files = await response.json();
+        renderMedia(files);
+      };
+
+      const removeMedia = async (name) => {
+        const response = await fetch(`/api/admin/uploads/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.error || 'Suppression impossible');
+        }
+      };
+
+      Dropzone.autoDiscover = false;
+      const dz = new Dropzone('#mediaDropzone', {
+        url: '/api/admin/uploads',
+        paramName: 'image',
+        acceptedFiles: 'image/*',
+        maxFilesize: 5,
+        uploadMultiple: true,
+        parallelUploads: 8,
+        timeout: 120000
+      });
+
+      dz.on('successmultiple', async () => {
+        showStatus('Images uploades.');
+        dz.removeAllFiles(true);
+        await loadMedia();
+      });
+
+      dz.on('success', async () => {
+        showStatus('Image uploadee.');
+        dz.removeAllFiles(true);
+        await loadMedia();
+      });
+
+      dz.on('error', (file, message) => {
+        const error = typeof message === 'string' ? message : 'Upload impossible';
+        alert(error);
+      });
+
+      gridEl.addEventListener('click', async (event) => {
+        const target = event.target;
+        const action = target.getAttribute('data-action');
+        if (!action) return;
+
+        try {
+          if (action === 'copy-url') {
+            await copyText(target.getAttribute('data-url') || '');
+            return;
+          }
+
+          if (action === 'copy-code') {
+            const url = target.getAttribute('data-url') || '';
+            await copyText(`<img src="${url}" alt="" />`);
+            return;
+          }
+
+          if (action === 'delete') {
+            const name = target.getAttribute('data-name') || '';
+            if (!name) return;
+            const ok = window.confirm('Supprimer ce fichier ?');
+            if (!ok) return;
+            await removeMedia(name);
+            showStatus('Fichier supprime.');
+            await loadMedia();
+          }
+        } catch (error) {
+          alert(error.message || 'Action impossible');
+        }
+      });
+
+      loadMedia().catch((error) => {
+        gridEl.innerHTML = `<p class="error">${error.message}</p>`;
+      });
+    </script>
+  </body>
+</html>
