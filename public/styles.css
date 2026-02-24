@@ -315,6 +315,10 @@ textarea {
   margin-top: 0.9rem;
 }
 
+.latest-article-section {
+  width: 100%;
+}
+
 .filter-row {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr auto;

@@ -19,7 +19,7 @@
         <p class="subtitle" id="heroSubtitle">recit, informations, news sur la vie d'un sexpat</p>
       </section>
 
-      <section class="admin-panel article-list-panel">
+      <section class="admin-panel article-list-panel latest-article-section">
         <h2>Dernier article publie</h2>
         <div id="latestArticle">
           <p class="muted">Chargement...</p>
@@ -97,9 +97,9 @@
         container.innerHTML = `
           <article class="list-item vertical-item">
             <h3><a href="/article/${encodeURIComponent(article.slug)}">${escapeHtml(article.title)}</a></h3>
-            ${article.coverImageUrl ? `<img class="cover-image" src="${article.coverImageUrl}" alt="${escapeHtml(article.title)}" />` : ''}
             ${renderChips(article.categories, 'Categories')}
             ${renderChips(article.tags, 'Tags')}
+            ${article.coverImageUrl ? `<img class="cover-image" src="${article.coverImageUrl}" alt="${escapeHtml(article.title)}" />` : ''}
             <div class="article-content">${article.content || ''}</div>
             <p><a class="btn btn-ghost" href="/article/${encodeURIComponent(article.slug)}">Lire la page article</a></p>
           </article>
