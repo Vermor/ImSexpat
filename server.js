@@ -3,6 +3,7 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
 const sanitizeHtml = require('sanitize-html');
+const { v2: cloudinary } = require('cloudinary');
 const path = require('path');
 const fs = require('fs');
 const {
@@ -23,6 +24,20 @@ const app = express();
 const port = process.env.PORT || 3000;
 const isProd = process.env.NODE_ENV === 'production';
 const primaryDomain = process.env.PRIMARY_DOMAIN || 'imsexpat.site';
+const cloudinaryFolder = process.env.CLOUDINARY_FOLDER || 'imsexpat';
+const hasCloudinaryConfig = Boolean(
+  process.env.CLOUDINARY_CLOUD_NAME &&
+  process.env.CLOUDINARY_API_KEY &&
+  process.env.CLOUDINARY_API_SECRET
+);
+
+if (hasCloudinaryConfig) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+  });
+}
 
 const uploadsDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -49,7 +64,61 @@ const upload = multer({
 
 const isSafeUploadName = (name) => /^[a-zA-Z0-9._-]+$/.test(name || '');
 
+const removeLocalTempFile = async (targetPath) => {
+  if (!targetPath) return;
+  try {
+    await fs.promises.unlink(targetPath);
+  } catch (error) {
+    // ignore temp cleanup failures
+  }
+};
+
+const uploadFileToStorage = async (file) => {
+  if (!file) return null;
+
+  if (hasCloudinaryConfig) {
+    const uploaded = await cloudinary.uploader.upload(file.path, {
+      folder: cloudinaryFolder,
+      resource_type: 'image',
+      use_filename: true,
+      unique_filename: true
+    });
+    await removeLocalTempFile(file.path);
+    return {
+      id: uploaded.public_id,
+      name: uploaded.original_filename || path.basename(uploaded.public_id),
+      url: uploaded.secure_url,
+      size: uploaded.bytes,
+      updatedAt: uploaded.created_at
+    };
+  }
+
+  return {
+    id: file.filename,
+    name: file.filename,
+    url: `/uploads/${file.filename}`,
+    size: file.size,
+    updatedAt: new Date().toISOString()
+  };
+};
+
 const listUploadFiles = async () => {
+  if (hasCloudinaryConfig) {
+    const response = await cloudinary.search
+      .expression(`folder:${cloudinaryFolder} AND resource_type:image`)
+      .sort_by('created_at', 'desc')
+      .max_results(200)
+      .execute();
+
+    return (response.resources || []).map((item) => ({
+      id: item.public_id,
+      name: item.display_name || item.filename || path.basename(item.public_id),
+      url: item.secure_url,
+      size: item.bytes,
+      updatedAt: item.created_at
+    }));
+  }
+
   const entries = await fs.promises.readdir(uploadsDir, { withFileTypes: true });
   const files = await Promise.all(entries
     .filter((entry) => entry.isFile() && entry.name !== '.gitkeep')
@@ -57,6 +126,7 @@ const listUploadFiles = async () => {
       const fullPath = path.join(uploadsDir, entry.name);
       const stat = await fs.promises.stat(fullPath);
       return {
+        id: entry.name,
         name: entry.name,
         url: `/uploads/${entry.name}`,
         size: stat.size,
@@ -65,6 +135,22 @@ const listUploadFiles = async () => {
     }));
 
   return files.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+};
+
+const deleteUploadFile = async (id) => {
+  if (hasCloudinaryConfig) {
+    await cloudinary.uploader.destroy(id, { resource_type: 'image' });
+    return;
+  }
+
+  if (!isSafeUploadName(id)) {
+    const error = new Error('Invalid file name');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const target = path.join(uploadsDir, id);
+  await fs.promises.unlink(target);
 };
 
 app.use(express.urlencoded({ extended: false }));
@@ -122,13 +208,11 @@ const normalizeLandingPayload = (payload) => ({
   footerText: sanitizeText(payload.footerText, 120) || DEFAULT_LANDING_CONTENT.footerText
 });
 
-const normalizeArticlePayload = (payload, file, currentCover = '') => {
+const normalizeArticlePayload = (payload, uploadedCoverUrl, currentCover = '') => {
   const publishedRaw = payload.published;
   const published = publishedRaw === true || publishedRaw === 'true' || publishedRaw === 'on' || publishedRaw === '1';
 
-  const nextCover = file
-    ? `/uploads/${file.filename}`
-    : sanitizeText(payload.coverImageUrl, 300) || currentCover || '';
+  const nextCover = uploadedCoverUrl || sanitizeText(payload.coverImageUrl, 300) || currentCover || '';
 
   const rawContent = String(payload.content ?? '');
   const safeContent = sanitizeHtml(rawContent, {
@@ -332,18 +416,22 @@ app.get('/api/admin/uploads', protectAdmin, async (req, res) => {
 });
 
 app.post('/api/admin/uploads', protectAdmin, upload.any(), (req, res) => {
-  const files = (req.files || []).map((file) => ({
-    name: file.filename,
-    url: `/uploads/${file.filename}`,
-    size: file.size
-  }));
-  res.json({ ok: true, files });
+  Promise.all((req.files || []).map((file) => uploadFileToStorage(file)))
+    .then((files) => {
+      res.json({ ok: true, files: files.filter(Boolean) });
+    })
+    .catch((error) => {
+      console.error('Failed to upload files:', error);
+      res.status(500).json({ error: 'Failed to upload files' });
+    });
 });
 
 app.post('/api/admin/articles', protectAdmin, upload.single('coverImage'), async (req, res) => {
   try {
     const idValue = sanitizeText(req.body.id, 24);
     const id = idValue ? Number(idValue) : null;
+    const uploadedCover = req.file ? await uploadFileToStorage(req.file) : null;
+    const uploadedCoverUrl = uploadedCover ? uploadedCover.url : '';
 
     if (idValue && (!Number.isInteger(id) || id <= 0)) {
       res.status(400).json({ error: 'Invalid article id' });
@@ -357,7 +445,7 @@ app.post('/api/admin/articles', protectAdmin, upload.single('coverImage'), async
         return;
       }
 
-      const payload = normalizeArticlePayload(req.body, req.file, current.coverImageUrl);
+      const payload = normalizeArticlePayload(req.body, uploadedCoverUrl, current.coverImageUrl);
       if (!payload.title) {
         res.status(400).json({ error: 'Title is required' });
         return;
@@ -368,7 +456,7 @@ app.post('/api/admin/articles', protectAdmin, upload.single('coverImage'), async
       return;
     }
 
-    const payload = normalizeArticlePayload(req.body, req.file);
+    const payload = normalizeArticlePayload(req.body, uploadedCoverUrl);
     if (!payload.title) {
       res.status(400).json({ error: 'Title is required' });
       return;
@@ -388,26 +476,36 @@ app.post('/api/admin/uploads/image', protectAdmin, upload.single('image'), (req,
     return;
   }
 
-  res.json({
-    ok: true,
-    url: `/uploads/${req.file.filename}`
-  });
+  uploadFileToStorage(req.file)
+    .then((stored) => {
+      res.json({
+        ok: true,
+        url: stored ? stored.url : ''
+      });
+    })
+    .catch((error) => {
+      console.error('Failed to upload inline image:', error);
+      res.status(500).json({ error: 'Failed to upload image' });
+    });
 });
 
-app.delete('/api/admin/uploads/:name', protectAdmin, async (req, res) => {
+app.delete('/api/admin/uploads', protectAdmin, async (req, res) => {
   try {
-    const name = req.params.name;
-    if (!isSafeUploadName(name)) {
-      res.status(400).json({ error: 'Invalid file name' });
+    const id = sanitizeText(req.query.id, 300);
+    if (!id) {
+      res.status(400).json({ error: 'Missing file id' });
       return;
     }
 
-    const target = path.join(uploadsDir, name);
-    await fs.promises.unlink(target);
+    await deleteUploadFile(id);
     res.json({ ok: true });
   } catch (error) {
     if (error && error.code === 'ENOENT') {
       res.status(404).json({ error: 'File not found' });
+      return;
+    }
+    if (error && error.statusCode === 400) {
+      res.status(400).json({ error: error.message });
       return;
     }
     console.error('Failed to delete upload:', error);
@@ -447,6 +545,7 @@ app.use((error, req, res, next) => {
 const start = async () => {
   try {
     await initStorage();
+    console.log(`Media storage: ${hasCloudinaryConfig ? 'cloudinary' : 'local filesystem'}`);
     app.listen(port, () => {
       console.log(`ImSexpat app running on http://localhost:${port}`);
     });

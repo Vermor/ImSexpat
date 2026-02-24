@@ -75,7 +75,7 @@
               <button class="btn btn-ghost" type="button" data-action="copy-url" data-url="${file.url}">Copier URL</button>
               <button class="btn btn-ghost" type="button" data-action="copy-code" data-url="${file.url}">Copier IMG</button>
               <a class="btn btn-ghost" href="/admin/articles?insertImage=${encodeURIComponent(file.url)}">Utiliser</a>
-              <button class="btn btn-ghost" type="button" data-action="delete" data-name="${file.name}">Supprimer</button>
+              <button class="btn btn-ghost" type="button" data-action="delete" data-id="${encodeURIComponent(file.id)}">Supprimer</button>
             </div>
           </article>
         `).join('');
@@ -88,8 +88,8 @@
         renderMedia(files);
       };
 
-      const removeMedia = async (name) => {
-        const response = await fetch(`/api/admin/uploads/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      const removeMedia = async (id) => {
+        const response = await fetch(`/api/admin/uploads?id=${id}`, { method: 'DELETE' });
         if (!response.ok) {
           const payload = await response.json().catch(() => ({}));
           throw new Error(payload.error || 'Suppression impossible');
@@ -152,11 +152,11 @@
           }
 
           if (action === 'delete') {
-            const name = target.getAttribute('data-name') || '';
-            if (!name) return;
+            const id = target.getAttribute('data-id') || '';
+            if (!id) return;
             const ok = window.confirm('Supprimer ce fichier ?');
             if (!ok) return;
-            await removeMedia(name);
+            await removeMedia(id);
             showStatus('Fichier supprime.');
             await loadMedia();
           }

@@ -19,6 +19,10 @@ Puis ouvre `http://localhost:3000`.
 - `COOKIE_SECRET`: secret pour signer le cookie de session admin.
 - `DATABASE_URL`: URL PostgreSQL (Railway DB).
 - `PRIMARY_DOMAIN`: domaine principal public (ex: `imsexpat.site`).
+- `CLOUDINARY_CLOUD_NAME`: cloud name Cloudinary (optionnel mais recommande pour uploads persistants).
+- `CLOUDINARY_API_KEY`: API key Cloudinary.
+- `CLOUDINARY_API_SECRET`: API secret Cloudinary.
+- `CLOUDINARY_FOLDER`: dossier cible Cloudinary (defaut: `imsexpat`).
 
 ## Securite mot de passe
 
@@ -57,6 +61,7 @@ Important Railway:
 - Les fichiers uploades dans `public/uploads` sont sur le disque du service.
 - Selon la config Railway, ce stockage peut etre ephemere.
 - Pour du long terme, prevois Railway Volume ou stockage objet (S3/Cloudinary).
+- Si Cloudinary est configure, les uploads media et images d'articles sont stockes de facon persistante sur Cloudinary.
 
 ## Deploiement Railway
 
