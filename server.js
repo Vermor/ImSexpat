@@ -95,7 +95,14 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(cookieParser(process.env.COOKIE_SECRET || 'local-dev-secret'));
 
+app.get('/health', (req, res) => {
+  res.status(200).send('ok');
+});
+
 app.use((req, res, next) => {
+  if (req.path === '/health') {
+    return next();
+  }
   const host = (req.headers.host || '').toLowerCase();
   const targetHost = primaryDomain.toLowerCase();
 
