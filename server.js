@@ -3,7 +3,6 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
 const sanitizeHtml = require('sanitize-html');
-const { v2: cloudinary } = require('cloudinary');
 const path = require('path');
 const fs = require('fs');
 const {
@@ -24,20 +23,6 @@ const app = express();
 const port = process.env.PORT || 3000;
 const isProd = process.env.NODE_ENV === 'production';
 const primaryDomain = process.env.PRIMARY_DOMAIN || 'imsexpat.site';
-const cloudinaryFolder = process.env.CLOUDINARY_FOLDER || 'imsexpat';
-const hasCloudinaryConfig = Boolean(
-  process.env.CLOUDINARY_CLOUD_NAME &&
-  process.env.CLOUDINARY_API_KEY &&
-  process.env.CLOUDINARY_API_SECRET
-);
-
-if (hasCloudinaryConfig) {
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
-  });
-}
 
 const uploadsDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -64,34 +49,8 @@ const upload = multer({
 
 const isSafeUploadName = (name) => /^[a-zA-Z0-9._-]+$/.test(name || '');
 
-const removeLocalTempFile = async (targetPath) => {
-  if (!targetPath) return;
-  try {
-    await fs.promises.unlink(targetPath);
-  } catch (error) {
-    // ignore temp cleanup failures
-  }
-};
-
 const uploadFileToStorage = async (file) => {
   if (!file) return null;
-
-  if (hasCloudinaryConfig) {
-    const uploaded = await cloudinary.uploader.upload(file.path, {
-      folder: cloudinaryFolder,
-      resource_type: 'image',
-      use_filename: true,
-      unique_filename: true
-    });
-    await removeLocalTempFile(file.path);
-    return {
-      id: uploaded.public_id,
-      name: uploaded.original_filename || path.basename(uploaded.public_id),
-      url: uploaded.secure_url,
-      size: uploaded.bytes,
-      updatedAt: uploaded.created_at
-    };
-  }
 
   return {
     id: file.filename,
@@ -103,22 +62,6 @@ const uploadFileToStorage = async (file) => {
 };
 
 const listUploadFiles = async () => {
-  if (hasCloudinaryConfig) {
-    const response = await cloudinary.search
-      .expression(`folder:${cloudinaryFolder} AND resource_type:image`)
-      .sort_by('created_at', 'desc')
-      .max_results(200)
-      .execute();
-
-    return (response.resources || []).map((item) => ({
-      id: item.public_id,
-      name: item.display_name || item.filename || path.basename(item.public_id),
-      url: item.secure_url,
-      size: item.bytes,
-      updatedAt: item.created_at
-    }));
-  }
-
   const entries = await fs.promises.readdir(uploadsDir, { withFileTypes: true });
   const files = await Promise.all(entries
     .filter((entry) => entry.isFile() && entry.name !== '.gitkeep')
@@ -138,11 +81,6 @@ const listUploadFiles = async () => {
 };
 
 const deleteUploadFile = async (id) => {
-  if (hasCloudinaryConfig) {
-    await cloudinary.uploader.destroy(id, { resource_type: 'image' });
-    return;
-  }
-
   if (!isSafeUploadName(id)) {
     const error = new Error('Invalid file name');
     error.statusCode = 400;
@@ -545,7 +483,7 @@ app.use((error, req, res, next) => {
 const start = async () => {
   try {
     await initStorage();
-    console.log(`Media storage: ${hasCloudinaryConfig ? 'cloudinary' : 'local filesystem'}`);
+    console.log('Media storage: local filesystem');
     app.listen(port, () => {
       console.log(`ImSexpat app running on http://localhost:${port}`);
     });

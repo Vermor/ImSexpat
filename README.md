@@ -19,10 +19,6 @@ Puis ouvre `http://localhost:3000`.
 - `COOKIE_SECRET`: secret pour signer le cookie de session admin.
 - `DATABASE_URL`: URL PostgreSQL (Railway DB).
 - `PRIMARY_DOMAIN`: domaine principal public (ex: `imsexpat.site`).
-- `CLOUDINARY_CLOUD_NAME`: cloud name Cloudinary (optionnel mais recommande pour uploads persistants).
-- `CLOUDINARY_API_KEY`: API key Cloudinary.
-- `CLOUDINARY_API_SECRET`: API secret Cloudinary.
-- `CLOUDINARY_FOLDER`: dossier cible Cloudinary (defaut: `imsexpat`).
 
 ## Securite mot de passe
 
@@ -34,11 +30,20 @@ Le mot de passe ne doit jamais etre commit.
 ## DB Railway (PostgreSQL)
 
 1. Dans ton projet Railway, clique `New` -> `Database` -> `Add PostgreSQL`.
-2. Ouvre la DB creee, va dans ses variables et recupere `DATABASE_URL`.
-3. Partage cette variable avec le service web ImSexpat (`Share with service`).
-4. Redeploy le service web.
+2. Dans le service web ImSexpat, configure les refs DB (`PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`) ou `DATABASE_URL`.
+3. Redeploy le service web.
 
 Au demarrage, l'app cree automatiquement les tables `landing_content` et `articles` si elles n'existent pas.
+
+## Stockage images Railway Volume
+
+Pour que les uploads ne disparaissent pas apres redeploy:
+
+1. Crée un volume Railway.
+2. Monte le volume sur le service `ImSexpat` au chemin exact: `/app/public/uploads`.
+3. Redeploy le service.
+
+L'app ecrit les fichiers d'upload dans ce dossier, donc ils deviennent persistants.
 
 ## Admin landing
 
@@ -56,12 +61,6 @@ Tous les textes de la landing sont modifiables depuis cette page.
 - Bibliotheque d'uploads avec drag-and-drop et insertion rapide dans l'editeur.
 - Listing public: `/articles`
 - Detail public: `/article/:slug`
-
-Important Railway:
-- Les fichiers uploades dans `public/uploads` sont sur le disque du service.
-- Selon la config Railway, ce stockage peut etre ephemere.
-- Pour du long terme, prevois Railway Volume ou stockage objet (S3/Cloudinary).
-- Si Cloudinary est configure, les uploads media et images d'articles sont stockes de facon persistante sur Cloudinary.
 
 ## Deploiement Railway
 
