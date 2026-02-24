@@ -17,29 +17,11 @@
       <section class="hero">
         <h1 id="heroTitle">Journal d'un sexpat</h1>
         <p class="subtitle" id="heroSubtitle">recit, informations, news sur la vie d'un sexpat</p>
-        <div class="hero-actions">
-          <a id="heroCta" href="/articles" class="btn btn-ghost">Voir les themes</a>
-        </div>
-      </section>
-
-      <section id="articles" class="grid">
-        <article class="card">
-          <h2 id="card1Title">Installation expat</h2>
-          <p id="card1Text">Checklist arrivee, visa, assurance, banque et appart a Bangkok ou Chiang Mai.</p>
-        </article>
-        <article class="card">
-          <h2 id="card2Title">Vie quotidienne</h2>
-          <p id="card2Text">Transports, sante, courses, quartiers et habitudes culturelles a connaitre.</p>
-        </article>
-        <article class="card">
-          <h2 id="card3Title">Week-ends & iles</h2>
-          <p id="card3Text">Itineraires realistes depuis les grandes villes vers les meilleures escapades.</p>
-        </article>
       </section>
 
       <section class="admin-panel article-list-panel">
-        <h2>Derniers articles</h2>
-        <div id="latestArticles" class="admin-list">
+        <h2>Dernier article publie</h2>
+        <div id="latestArticle">
           <p class="muted">Chargement...</p>
         </div>
       </section>
@@ -75,19 +57,7 @@
         setText('brand', content.siteName);
         setText('heroTitle', content.heroTitle);
         setText('heroSubtitle', content.heroSubtitle);
-        setText('card1Title', content.card1Title);
-        setText('card1Text', content.card1Text);
-        setText('card2Title', content.card2Title);
-        setText('card2Text', content.card2Text);
-        setText('card3Title', content.card3Title);
-        setText('card3Text', content.card3Text);
         setText('footerText', content.footerText || content.siteName);
-
-        const cta = document.getElementById('heroCta');
-        if (cta && content.ctaText) {
-          cta.textContent = content.ctaText;
-          cta.href = content.ctaHref || '/articles';
-        }
       };
 
       const loadLandingContent = async () => {
@@ -108,34 +78,45 @@
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
 
-      const renderLatestArticles = (articles) => {
-        const listEl = document.getElementById('latestArticles');
-        if (!listEl) return;
+      const renderChips = (items, label) => {
+        if (!Array.isArray(items) || items.length === 0) return '';
+        return `
+          <p class="muted">${label}: ${items.map((x) => `<span class="chip">${escapeHtml(x)}</span>`).join(' ')}</p>
+        `;
+      };
 
-        if (!Array.isArray(articles) || articles.length === 0) {
-          listEl.innerHTML = '<p class="muted">Aucun article publie pour le moment.</p>';
+      const renderLatestArticle = (article) => {
+        const container = document.getElementById('latestArticle');
+        if (!container) return;
+
+        if (!article) {
+          container.innerHTML = '<p class="muted">Aucun article publie pour le moment.</p>';
           return;
         }
 
-        const top = articles.slice(0, 6);
-        listEl.innerHTML = top.map((article) => `
+        container.innerHTML = `
           <article class="list-item vertical-item">
             <h3><a href="/article/${encodeURIComponent(article.slug)}">${escapeHtml(article.title)}</a></h3>
-            <p class="muted">${escapeHtml(article.excerpt || '')}</p>
+            ${article.coverImageUrl ? `<img class="cover-image" src="${article.coverImageUrl}" alt="${escapeHtml(article.title)}" />` : ''}
+            ${renderChips(article.categories, 'Categories')}
+            ${renderChips(article.tags, 'Tags')}
+            <div class="article-content">${article.content || ''}</div>
+            <p><a class="btn btn-ghost" href="/article/${encodeURIComponent(article.slug)}">Lire la page article</a></p>
           </article>
-        `).join('');
+        `;
       };
 
-      const loadLatestArticles = async () => {
+      const loadLatestArticle = async () => {
         try {
-          const response = await fetch('/api/articles?page=1&pageSize=6', { cache: 'no-store' });
+          const response = await fetch('/api/articles?page=1&pageSize=1', { cache: 'no-store' });
           if (!response.ok) throw new Error('Failed to load articles');
           const payload = await response.json();
-          renderLatestArticles(payload.items || []);
+          const latest = (payload.items || [])[0] || null;
+          renderLatestArticle(latest);
         } catch (error) {
-          const listEl = document.getElementById('latestArticles');
-          if (listEl) {
-            listEl.innerHTML = '<p class="error">Erreur de chargement des articles.</p>';
+          const container = document.getElementById('latestArticle');
+          if (container) {
+            container.innerHTML = '<p class="error">Erreur de chargement de l\'article.</p>';
           }
           console.error(error);
         }
@@ -143,7 +124,7 @@
 
       document.getElementById('year').textContent = new Date().getFullYear();
       loadLandingContent();
-      loadLatestArticles();
+      loadLatestArticle();
     </script>
   </body>
 </html>

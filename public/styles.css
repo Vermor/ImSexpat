@@ -335,6 +335,16 @@ textarea {
   color: var(--muted);
 }
 
+.chip {
+  display: inline-block;
+  margin: 0 0.35rem 0.35rem 0;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 0.82rem;
+}
+
 .article-view h1 {
   margin-top: 0;
 }
