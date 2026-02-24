@@ -36,6 +36,13 @@
           <p id="card3Text">Itineraires realistes depuis les grandes villes vers les meilleures escapades.</p>
         </article>
       </section>
+
+      <section class="admin-panel article-list-panel">
+        <h2>Derniers articles</h2>
+        <div id="latestArticles" class="admin-list">
+          <p class="muted">Chargement...</p>
+        </div>
+      </section>
     </main>
 
     <footer class="site-footer">
@@ -94,8 +101,49 @@
         }
       };
 
+      const escapeHtml = (value) => String(value || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+
+      const renderLatestArticles = (articles) => {
+        const listEl = document.getElementById('latestArticles');
+        if (!listEl) return;
+
+        if (!Array.isArray(articles) || articles.length === 0) {
+          listEl.innerHTML = '<p class="muted">Aucun article publie pour le moment.</p>';
+          return;
+        }
+
+        const top = articles.slice(0, 6);
+        listEl.innerHTML = top.map((article) => `
+          <article class="list-item vertical-item">
+            <h3><a href="/article/${encodeURIComponent(article.slug)}">${escapeHtml(article.title)}</a></h3>
+            <p class="muted">${escapeHtml(article.excerpt || '')}</p>
+          </article>
+        `).join('');
+      };
+
+      const loadLatestArticles = async () => {
+        try {
+          const response = await fetch('/api/articles', { cache: 'no-store' });
+          if (!response.ok) throw new Error('Failed to load articles');
+          const articles = await response.json();
+          renderLatestArticles(articles);
+        } catch (error) {
+          const listEl = document.getElementById('latestArticles');
+          if (listEl) {
+            listEl.innerHTML = '<p class="error">Erreur de chargement des articles.</p>';
+          }
+          console.error(error);
+        }
+      };
+
       document.getElementById('year').textContent = new Date().getFullYear();
       loadLandingContent();
+      loadLatestArticles();
     </script>
   </body>
 </html>
