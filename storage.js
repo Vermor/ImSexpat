@@ -23,16 +23,29 @@ let inMemoryArticles = [];
 let inMemoryArticleId = 1;
 
 const createPool = () => {
-  if (!process.env.DATABASE_URL) {
-    return null;
+  const databaseUrl = String(process.env.DATABASE_URL || '').trim();
+  if (databaseUrl) {
+    const isLocal = databaseUrl.includes('localhost') || databaseUrl.includes('127.0.0.1');
+    return new Pool({
+      connectionString: databaseUrl,
+      ssl: isLocal ? false : { rejectUnauthorized: false }
+    });
   }
 
-  const isLocal = process.env.DATABASE_URL.includes('localhost') || process.env.DATABASE_URL.includes('127.0.0.1');
+  const hasPgParts = process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD && process.env.PGDATABASE;
+  if (hasPgParts) {
+    const isLocal = String(process.env.PGHOST).includes('localhost') || String(process.env.PGHOST).includes('127.0.0.1');
+    return new Pool({
+      host: process.env.PGHOST,
+      port: Number(process.env.PGPORT || 5432),
+      user: process.env.PGUSER,
+      password: process.env.PGPASSWORD,
+      database: process.env.PGDATABASE,
+      ssl: isLocal ? false : { rejectUnauthorized: false }
+    });
+  }
 
-  return new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: isLocal ? false : { rejectUnauthorized: false }
-  });
+  return null;
 };
 
 const mapLandingRow = (row) => ({
@@ -184,7 +197,10 @@ const initStorage = async () => {
 
   if (!pool) {
     if (process.env.NODE_ENV === 'production') {
-      throw new Error('DATABASE_URL is missing in production. Refusing to start without PostgreSQL.');
+      const keys = ['DATABASE_URL', 'PGHOST', 'PGPORT', 'PGUSER', 'PGPASSWORD', 'PGDATABASE']
+        .map((k) => `${k}=${process.env[k] ? 'set' : 'missing'}`)
+        .join(', ');
+      throw new Error(`No PostgreSQL config found in production. ${keys}`);
     }
     console.warn('DATABASE_URL missing: using in-memory storage for landing and articles.');
     return;
