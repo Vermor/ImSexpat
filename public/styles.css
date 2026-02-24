@@ -330,6 +330,14 @@ textarea {
   line-height: 1.6;
 }
 
+.article-content img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0.9rem 0;
+  border-radius: 10px;
+}
+
 .media-dropzone {
   margin-top: 0.8rem;
   border: 2px dashed var(--line);
