@@ -97,6 +97,42 @@
           ]
         }
       });
+      const toolbar = quill.getModule('toolbar');
+
+      const uploadInlineImage = () => {
+        const input = document.createElement('input');
+        input.setAttribute('type', 'file');
+        input.setAttribute('accept', 'image/*');
+        input.click();
+
+        input.onchange = async () => {
+          const file = input.files && input.files[0];
+          if (!file) return;
+
+          const body = new FormData();
+          body.append('image', file);
+
+          try {
+            const response = await fetch('/api/admin/uploads/image', {
+              method: 'POST',
+              body
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok || !payload.url) {
+              throw new Error(payload.error || 'Upload image impossible');
+            }
+
+            const range = quill.getSelection(true) || { index: quill.getLength(), length: 0 };
+            quill.insertEmbed(range.index, 'image', payload.url, 'user');
+            quill.setSelection(range.index + 1, 0);
+          } catch (error) {
+            alert(error.message || 'Upload image impossible');
+          }
+        };
+      };
+
+      toolbar.addHandler('image', uploadInlineImage);
 
       const escapeHtml = (value) => String(value || '')
         .replaceAll('&', '&amp;')

@@ -339,6 +339,18 @@ app.post('/api/admin/articles', protectAdmin, upload.single('coverImage'), async
   }
 });
 
+app.post('/api/admin/uploads/image', protectAdmin, upload.single('image'), (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ error: 'Image file is required' });
+    return;
+  }
+
+  res.json({
+    ok: true,
+    url: `/uploads/${req.file.filename}`
+  });
+});
+
 app.delete('/api/admin/articles/:id', protectAdmin, async (req, res) => {
   try {
     const id = Number(req.params.id);
