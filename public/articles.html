@@ -33,6 +33,13 @@
       const categoryEl = document.getElementById('category');
       const tagEl = document.getElementById('tag');
       const applyEl = document.getElementById('apply');
+      const initialSearch = new URLSearchParams(window.location.search);
+      const state = {
+        page: Math.max(1, Number(initialSearch.get('page') || 1)),
+        q: initialSearch.get('q') || '',
+        category: initialSearch.get('category') || '',
+        tag: initialSearch.get('tag') || ''
+      };
 
       const escapeHtml = (value) => String(value || '')
         .replaceAll('&', '&amp;')
@@ -46,6 +53,14 @@
         const tags = tax.tags || [];
         categoryEl.innerHTML = '<option value="">Toutes categories</option>' + categories.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
         tagEl.innerHTML = '<option value="">Tous tags</option>' + tags.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+        if (state.category && !categories.includes(state.category)) {
+          categoryEl.innerHTML += `<option value="${escapeHtml(state.category)}">${escapeHtml(state.category)}</option>`;
+        }
+        if (state.tag && !tags.includes(state.tag)) {
+          tagEl.innerHTML += `<option value="${escapeHtml(state.tag)}">${escapeHtml(state.tag)}</option>`;
+        }
+        if (state.category) categoryEl.value = state.category;
+        if (state.tag) tagEl.value = state.tag;
       };
 
       const render = (articles, pagination) => {
@@ -75,30 +90,45 @@
 
       const load = async (page = 1) => {
         const params = new URLSearchParams({ page: String(page), pageSize: '9' });
-        if (qEl.value.trim()) params.set('q', qEl.value.trim());
-        if (categoryEl.value) params.set('category', categoryEl.value);
-        if (tagEl.value) params.set('tag', tagEl.value);
+        if (state.q) params.set('q', state.q);
+        if (state.category) params.set('category', state.category);
+        if (state.tag) params.set('tag', state.tag);
 
         const res = await fetch(`/api/articles?${params.toString()}`, { cache: 'no-store' });
         if (!res.ok) throw new Error('Erreur de chargement des articles.');
         const data = await res.json();
         fillTaxonomies(data.taxonomies || { categories: [], tags: [] });
         render(data.items || [], data.pagination || { page: 1, totalPages: 1 });
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.set('page', String(page));
+        if (state.q) nextUrl.searchParams.set('q', state.q); else nextUrl.searchParams.delete('q');
+        if (state.category) nextUrl.searchParams.set('category', state.category); else nextUrl.searchParams.delete('category');
+        if (state.tag) nextUrl.searchParams.set('tag', state.tag); else nextUrl.searchParams.delete('tag');
+        window.history.replaceState(null, '', `${nextUrl.pathname}?${nextUrl.searchParams.toString()}`);
       };
 
-      applyEl.addEventListener('click', () => load(1).catch((error) => {
-        listEl.innerHTML = `<p class="error">${error.message}</p>`;
-      }));
+      qEl.value = state.q;
 
-      pagerEl.addEventListener('click', (event) => {
-        const page = Number(event.target.getAttribute('data-page') || 0);
-        if (!page || page < 1) return;
-        load(page).catch((error) => {
+      applyEl.addEventListener('click', () => {
+        state.q = qEl.value.trim();
+        state.category = categoryEl.value;
+        state.tag = tagEl.value;
+        state.page = 1;
+        load(state.page).catch((error) => {
           listEl.innerHTML = `<p class="error">${error.message}</p>`;
         });
       });
 
-      load(1).catch((error) => {
+      pagerEl.addEventListener('click', (event) => {
+        const page = Number(event.target.getAttribute('data-page') || 0);
+        if (!page || page < 1) return;
+        state.page = page;
+        load(state.page).catch((error) => {
+          listEl.innerHTML = `<p class="error">${error.message}</p>`;
+        });
+      });
+
+      load(state.page).catch((error) => {
         listEl.innerHTML = `<p class="error">${error.message}</p>`;
       });
     </script>

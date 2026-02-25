@@ -10,6 +10,23 @@
   <body>
     <header class="site-header">
       <div class="brand" id="brand">ImSexpat</div>
+      <nav class="site-nav" aria-label="Navigation principale">
+        <a class="nav-link" href="/articles">Articles</a>
+        <div class="nav-dropdown" id="categoriesDropdown">
+          <button
+            id="categoriesToggle"
+            class="dropdown-toggle"
+            type="button"
+            aria-haspopup="true"
+            aria-expanded="false"
+          >
+            Categories
+          </button>
+          <div id="categoriesMenu" class="dropdown-menu" hidden>
+            <a class="dropdown-item" href="/articles">Toutes categories</a>
+          </div>
+        </div>
+      </nav>
       <a class="admin-link" href="/admin/login">Admin</a>
     </header>
 
@@ -44,6 +61,33 @@
         if (meta && value) {
           meta.setAttribute('content', value);
         }
+      };
+
+      const categoriesToggleEl = document.getElementById('categoriesToggle');
+      const categoriesMenuEl = document.getElementById('categoriesMenu');
+      const categoriesDropdownEl = document.getElementById('categoriesDropdown');
+
+      const closeCategoriesMenu = () => {
+        if (!categoriesMenuEl || !categoriesToggleEl) return;
+        categoriesMenuEl.hidden = true;
+        categoriesToggleEl.setAttribute('aria-expanded', 'false');
+      };
+
+      const openCategoriesMenu = () => {
+        if (!categoriesMenuEl || !categoriesToggleEl) return;
+        categoriesMenuEl.hidden = false;
+        categoriesToggleEl.setAttribute('aria-expanded', 'true');
+      };
+
+      const renderCategoryMenu = (categories) => {
+        if (!categoriesMenuEl) return;
+        const list = Array.isArray(categories) ? categories.filter(Boolean) : [];
+        categoriesMenuEl.innerHTML = `
+          <a class="dropdown-item" href="/articles">Toutes categories</a>
+          ${list.map((category) => `
+            <a class="dropdown-item" href="/articles?category=${encodeURIComponent(category)}">${escapeHtml(category)}</a>
+          `).join('')}
+        `;
       };
 
       const applyLandingContent = (content) => {
@@ -97,6 +141,7 @@
         container.innerHTML = `
           <article class="list-item vertical-item">
             <h3><a href="/article/${encodeURIComponent(article.slug)}">${escapeHtml(article.title)}</a></h3>
+            ${article.excerpt ? `<p class="muted">${escapeHtml(article.excerpt)}</p>` : ''}
             ${renderChips(article.categories, 'Categories')}
             ${renderChips(article.tags, 'Tags')}
             ${article.coverImageUrl ? `<img class="cover-image" src="${article.coverImageUrl}" alt="${escapeHtml(article.title)}" />` : ''}
@@ -113,16 +158,43 @@
           const payload = await response.json();
           const latest = (payload.items || [])[0] || null;
           renderLatestArticle(latest);
+          renderCategoryMenu((payload.taxonomies || {}).categories || []);
         } catch (error) {
           const container = document.getElementById('latestArticle');
           if (container) {
             container.innerHTML = '<p class="error">Erreur de chargement de l\'article.</p>';
           }
+          renderCategoryMenu([]);
           console.error(error);
         }
       };
 
       document.getElementById('year').textContent = new Date().getFullYear();
+      if (categoriesToggleEl && categoriesDropdownEl) {
+        categoriesToggleEl.addEventListener('click', (event) => {
+          event.preventDefault();
+          const expanded = categoriesToggleEl.getAttribute('aria-expanded') === 'true';
+          if (expanded) {
+            closeCategoriesMenu();
+            return;
+          }
+          openCategoriesMenu();
+        });
+
+        document.addEventListener('click', (event) => {
+          if (!categoriesDropdownEl.contains(event.target)) {
+            closeCategoriesMenu();
+          }
+        });
+
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') closeCategoriesMenu();
+        });
+
+        categoriesMenuEl.addEventListener('click', () => {
+          closeCategoriesMenu();
+        });
+      }
       loadLandingContent();
       loadLatestArticle();
     </script>
