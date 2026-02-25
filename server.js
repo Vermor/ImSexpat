@@ -106,6 +106,11 @@ const deleteUploadFile = async (id) => {
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(cookieParser(process.env.COOKIE_SECRET || 'local-dev-secret'));
+app.use((req, res, next) => {
+  // Ask crawlers not to index any page of this site.
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet');
+  next();
+});
 
 app.get('/health', (req, res) => {
   res.status(200).send('ok');
