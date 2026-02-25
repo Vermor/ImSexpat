@@ -9,6 +9,24 @@
   <body>
     <header class="site-header">
       <div class="brand">ImSexpat</div>
+      <nav class="site-nav" aria-label="Navigation principale">
+        <a class="nav-link" href="/">Accueil</a>
+        <a class="nav-link" href="/articles">Articles</a>
+        <div class="nav-dropdown" id="categoriesDropdown">
+          <button
+            id="categoriesToggle"
+            class="dropdown-toggle"
+            type="button"
+            aria-haspopup="true"
+            aria-expanded="false"
+          >
+            Categories
+          </button>
+          <div id="categoriesMenu" class="dropdown-menu" hidden>
+            <a class="dropdown-item" href="/articles">Toutes categories</a>
+          </div>
+        </div>
+      </nav>
       <a class="admin-link" href="/admin/login">Admin</a>
     </header>
 
@@ -33,6 +51,9 @@
       const categoryEl = document.getElementById('category');
       const tagEl = document.getElementById('tag');
       const applyEl = document.getElementById('apply');
+      const categoriesToggleEl = document.getElementById('categoriesToggle');
+      const categoriesMenuEl = document.getElementById('categoriesMenu');
+      const categoriesDropdownEl = document.getElementById('categoriesDropdown');
       const initialSearch = new URLSearchParams(window.location.search);
       const state = {
         page: Math.max(1, Number(initialSearch.get('page') || 1)),
@@ -48,11 +69,35 @@
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
 
+      const closeCategoriesMenu = () => {
+        if (!categoriesMenuEl || !categoriesToggleEl) return;
+        categoriesMenuEl.hidden = true;
+        categoriesToggleEl.setAttribute('aria-expanded', 'false');
+      };
+
+      const openCategoriesMenu = () => {
+        if (!categoriesMenuEl || !categoriesToggleEl) return;
+        categoriesMenuEl.hidden = false;
+        categoriesToggleEl.setAttribute('aria-expanded', 'true');
+      };
+
+      const renderCategoryMenu = (categories) => {
+        if (!categoriesMenuEl) return;
+        const list = Array.isArray(categories) ? categories.filter(Boolean) : [];
+        categoriesMenuEl.innerHTML = `
+          <a class="dropdown-item" href="/articles">Toutes categories</a>
+          ${list.map((category) => `
+            <a class="dropdown-item" href="/articles?category=${encodeURIComponent(category)}">${escapeHtml(category)}</a>
+          `).join('')}
+        `;
+      };
+
       const fillTaxonomies = (tax) => {
         const categories = tax.categories || [];
         const tags = tax.tags || [];
         categoryEl.innerHTML = '<option value="">Toutes categories</option>' + categories.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
         tagEl.innerHTML = '<option value="">Tous tags</option>' + tags.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+        renderCategoryMenu(categories);
         if (state.category && !categories.includes(state.category)) {
           categoryEl.innerHTML += `<option value="${escapeHtml(state.category)}">${escapeHtml(state.category)}</option>`;
         }
@@ -108,6 +153,31 @@
       };
 
       qEl.value = state.q;
+      if (categoriesToggleEl && categoriesDropdownEl) {
+        categoriesToggleEl.addEventListener('click', (event) => {
+          event.preventDefault();
+          const expanded = categoriesToggleEl.getAttribute('aria-expanded') === 'true';
+          if (expanded) {
+            closeCategoriesMenu();
+            return;
+          }
+          openCategoriesMenu();
+        });
+
+        document.addEventListener('click', (event) => {
+          if (!categoriesDropdownEl.contains(event.target)) {
+            closeCategoriesMenu();
+          }
+        });
+
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') closeCategoriesMenu();
+        });
+
+        categoriesMenuEl.addEventListener('click', () => {
+          closeCategoriesMenu();
+        });
+      }
 
       applyEl.addEventListener('click', () => {
         state.q = qEl.value.trim();

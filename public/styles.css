@@ -406,6 +406,31 @@ textarea {
   font-size: 0.82rem;
 }
 
+.article-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.8rem;
+  margin: 0.3rem 0 0.2rem;
+  color: var(--muted);
+}
+
+.meta-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.article-meta .chip {
+  margin: 0;
+}
+
+.article-excerpt {
+  margin: 0.35rem 0 0.7rem;
+  color: var(--ink);
+}
+
 .article-view h1 {
   margin-top: 0;
 }

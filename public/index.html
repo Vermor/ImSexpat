@@ -11,6 +11,7 @@
     <header class="site-header">
       <div class="brand" id="brand">ImSexpat</div>
       <nav class="site-nav" aria-label="Navigation principale">
+        <a class="nav-link" href="/">Accueil</a>
         <a class="nav-link" href="/articles">Articles</a>
         <div class="nav-dropdown" id="categoriesDropdown">
           <button
@@ -122,11 +123,31 @@
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
 
-      const renderChips = (items, label) => {
-        if (!Array.isArray(items) || items.length === 0) return '';
-        return `
-          <p class="muted">${label}: ${items.map((x) => `<span class="chip">${escapeHtml(x)}</span>`).join(' ')}</p>
-        `;
+      const renderMetaLine = (article) => {
+        const categories = Array.isArray(article.categories) ? article.categories.filter(Boolean) : [];
+        const tags = Array.isArray(article.tags) ? article.tags.filter(Boolean) : [];
+        const groups = [];
+
+        if (categories.length) {
+          groups.push(`
+            <span class="meta-group">
+              <strong>Categories:</strong>
+              ${categories.map((x) => `<span class="chip">${escapeHtml(x)}</span>`).join('')}
+            </span>
+          `);
+        }
+
+        if (tags.length) {
+          groups.push(`
+            <span class="meta-group">
+              <strong>Tags:</strong>
+              ${tags.map((x) => `<span class="chip">${escapeHtml(x)}</span>`).join('')}
+            </span>
+          `);
+        }
+
+        if (!groups.length) return '';
+        return `<p class="article-meta">${groups.join('')}</p>`;
       };
 
       const renderLatestArticle = (article) => {
@@ -141,9 +162,8 @@
         container.innerHTML = `
           <article class="list-item vertical-item">
             <h3><a href="/article/${encodeURIComponent(article.slug)}">${escapeHtml(article.title)}</a></h3>
-            ${article.excerpt ? `<p class="muted">${escapeHtml(article.excerpt)}</p>` : ''}
-            ${renderChips(article.categories, 'Categories')}
-            ${renderChips(article.tags, 'Tags')}
+            ${renderMetaLine(article)}
+            ${article.excerpt ? `<p class="article-excerpt">${escapeHtml(article.excerpt)}</p>` : ''}
             ${article.coverImageUrl ? `<img class="cover-image" src="${article.coverImageUrl}" alt="${escapeHtml(article.title)}" />` : ''}
             <div class="article-content">${article.content || ''}</div>
             <p><a class="btn btn-ghost" href="/article/${encodeURIComponent(article.slug)}">Lire la page article</a></p>
