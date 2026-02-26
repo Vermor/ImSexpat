@@ -145,6 +145,37 @@ const protectAdmin = [requireAdminPasswordConfig, (req, res, next) => {
 }];
 
 const sanitizeText = (value, maxLength) => String(value ?? '').trim().slice(0, maxLength);
+const escapeHtml = (value) => String(value ?? '')
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#39;');
+
+const getRequestOrigin = (req) => {
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const proto = forwardedProto || req.protocol || (isProd ? 'https' : 'http');
+  const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
+  const host = forwardedHost || req.get('host') || primaryDomain;
+  return `${proto}://${host}`;
+};
+
+const toAbsoluteUrl = (value, req) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+  const origin = getRequestOrigin(req);
+  if (raw.startsWith('//')) return `${origin.startsWith('https://') ? 'https:' : 'http:'}${raw}`;
+  if (raw.startsWith('/')) return `${origin}${raw}`;
+  return `${origin}/${raw}`;
+};
+
+const replaceMeta = (html, pattern, nextTag) => {
+  if (pattern.test(html)) {
+    return html.replace(pattern, nextTag);
+  }
+  return html;
+};
 
 const toCommaList = (value, maxLength = 400) => {
   if (Array.isArray(value)) {
@@ -226,7 +257,41 @@ const actorFromReq = (req) => sanitizeText(req.headers['x-forwarded-for'] || req
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/articles', (req, res) => res.sendFile(path.join(__dirname, 'public', 'articles.html')));
-app.get('/article/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'article.html')));
+app.get('/article/:slug', async (req, res) => {
+  try {
+    const filePath = path.join(__dirname, 'public', 'article.html');
+    const html = await fs.promises.readFile(filePath, 'utf8');
+    const article = await getArticleBySlug(req.params.slug);
+    if (!article) {
+      return res.status(404).type('html').send(html);
+    }
+
+    const title = article.seoTitle || article.title || 'Article | ImSexpat';
+    const description = article.seoDescription || article.excerpt || '';
+    const imageUrl = toAbsoluteUrl(article.ogImageUrl || article.coverImageUrl || '', req);
+    const pageUrl = toAbsoluteUrl(req.originalUrl || req.path || '/', req);
+
+    let output = html;
+    output = output.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`);
+    output = replaceMeta(output, /<meta\s+name="description"\s+content="[^"]*"\s*\/?>/i, `<meta name="description" content="${escapeHtml(description)}" />`);
+    output = replaceMeta(output, /<meta\s+property="og:title"\s+content="[^"]*"\s*\/?>/i, `<meta property="og:title" content="${escapeHtml(title)}" />`);
+    output = replaceMeta(output, /<meta\s+property="og:description"\s+content="[^"]*"\s*\/?>/i, `<meta property="og:description" content="${escapeHtml(description)}" />`);
+    output = replaceMeta(output, /<meta\s+property="og:image"\s+content="[^"]*"\s*\/?>/i, `<meta property="og:image" content="${escapeHtml(imageUrl)}" />`);
+    if (/<meta\s+property="og:url"\s+content="[^"]*"\s*\/?>/i.test(output)) {
+      output = output.replace(/<meta\s+property="og:url"\s+content="[^"]*"\s*\/?>/i, `<meta property="og:url" content="${escapeHtml(pageUrl)}" />`);
+    } else {
+      output = output.replace(
+        /<meta\s+property="og:image"\s+content="[^"]*"\s*\/?>/i,
+        `<meta property="og:image" content="${escapeHtml(imageUrl)}" />\n    <meta property="og:url" content="${escapeHtml(pageUrl)}" />`
+      );
+    }
+
+    return res.type('html').send(output);
+  } catch (error) {
+    console.error('Failed to render article page:', error);
+    return res.sendFile(path.join(__dirname, 'public', 'article.html'));
+  }
+});
 
 app.get('/api/landing', async (req, res) => {
   try {
