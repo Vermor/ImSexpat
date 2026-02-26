@@ -569,6 +569,40 @@ const deleteArticle = async (id) => {
   return result.rowCount > 0;
 };
 
+const getMediaUsage = async (mediaId) => {
+  const safeMediaId = String(mediaId || '').trim();
+  if (!safeMediaId) return [];
+  const marker = `/uploads/${safeMediaId}`;
+
+  const mapUsage = (article) => {
+    const places = [];
+    const cover = String(article.coverImageUrl || '');
+    const og = String(article.ogImageUrl || '');
+    const content = String(article.content || '');
+    if (cover.includes(marker)) places.push('cover');
+    if (og.includes(marker)) places.push('ogImage');
+    if (content.includes(marker)) places.push('content');
+    return places.length
+      ? { id: article.id, title: article.title, slug: article.slug, places }
+      : null;
+  };
+
+  if (!pool) {
+    return inMemoryArticles.map(mapUsage).filter(Boolean);
+  }
+
+  const query = await pool.query(
+    `SELECT * FROM articles
+     WHERE cover_image_url LIKE $1
+        OR og_image_url LIKE $1
+        OR content LIKE $1
+     ORDER BY updated_at DESC;`,
+    [`%${marker}%`]
+  );
+
+  return query.rows.map(mapArticleRow).map(mapUsage).filter(Boolean);
+};
+
 const logAdminAction = async (input) => {
   const entry = {
     action: String(input.action || ''),
@@ -616,6 +650,7 @@ module.exports = {
   createArticle,
   updateArticle,
   deleteArticle,
+  getMediaUsage,
   isSlugAvailable,
   logAdminAction,
   listAdminActivity,

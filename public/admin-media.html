@@ -92,7 +92,10 @@
         const response = await fetch(`/api/admin/uploads?id=${id}`, { method: 'DELETE' });
         if (!response.ok) {
           const payload = await response.json().catch(() => ({}));
-          throw new Error(payload.error || 'Suppression impossible');
+          const error = new Error(payload.error || 'Suppression impossible');
+          error.usage = Array.isArray(payload.usage) ? payload.usage : [];
+          error.status = response.status;
+          throw error;
         }
       };
 
@@ -161,6 +164,14 @@
             await loadMedia();
           }
         } catch (error) {
+          if (error && error.status === 409 && Array.isArray(error.usage) && error.usage.length) {
+            const lines = error.usage
+              .slice(0, 8)
+              .map((item) => `- ${item.title || item.slug || `Article ${item.id}`} (${(item.places || []).join(', ')})`);
+            const more = error.usage.length > 8 ? `\n... +${error.usage.length - 8} autre(s)` : '';
+            alert(`Suppression bloquee: image utilisee dans des articles.\n\n${lines.join('\n')}${more}`);
+            return;
+          }
           alert(error.message || 'Action impossible');
         }
       });

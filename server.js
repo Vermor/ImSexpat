@@ -18,6 +18,7 @@ const {
   createArticle,
   updateArticle,
   deleteArticle,
+  getMediaUsage,
   isSlugAvailable,
   logAdminAction,
   listAdminActivity,
@@ -553,6 +554,13 @@ app.delete('/api/admin/uploads', protectAdmin, async (req, res) => {
   try {
     const id = sanitizeText(req.query.id, 300);
     if (!id) return res.status(400).json({ error: 'Missing file id' });
+    const usage = await getMediaUsage(id);
+    if (usage.length) {
+      return res.status(409).json({
+        error: 'Image utilisee dans un ou plusieurs articles. Retire-la des articles avant suppression.',
+        usage
+      });
+    }
 
     await deleteUploadFile(id);
     await logAdminAction({
