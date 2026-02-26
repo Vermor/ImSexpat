@@ -149,6 +149,7 @@
       let dirty = false;
       let slugTimer = null;
       let currentPage = 1;
+      let lastRange = null;
 
       const quill = new Quill('#contentEditor', {
         theme: 'snow',
@@ -158,19 +159,18 @@
             ['bold', 'italic', 'underline', 'strike'],
             [{ align: [] }],
             [{ list: 'ordered' }, { list: 'bullet' }],
-            ['blockquote', 'code-block', 'link', 'image'],
+            ['blockquote', 'code-block', 'link'],
             ['clean']
           ]
         }
       });
 
-      const toolbar = quill.getModule('toolbar');
-
       const insertImageAtCursor = (url) => {
         if (!url) return;
-        const range = quill.getSelection(true) || { index: quill.getLength(), length: 0 };
+        const range = lastRange || quill.getSelection() || { index: quill.getLength(), length: 0 };
         quill.insertEmbed(range.index, 'image', url, 'user');
         quill.setSelection(range.index + 1, 0);
+        lastRange = { index: range.index + 1, length: 0 };
         markDirty();
         saveDraft();
       };
@@ -195,6 +195,8 @@
       };
 
       const openMediaPicker = async () => {
+        const current = quill.getSelection();
+        if (current) lastRange = current;
         mediaPickerModal.hidden = false;
         mediaPickerGrid.innerHTML = '<p class="muted">Chargement...</p>';
         try {
@@ -210,8 +212,6 @@
       const closeMediaPicker = () => {
         mediaPickerModal.hidden = true;
       };
-
-      toolbar.addHandler('image', openMediaPicker);
 
       const slugify = (value) => String(value || '')
         .toLowerCase()
@@ -531,6 +531,12 @@
       quill.on('text-change', () => {
         markDirty();
         saveDraft();
+      });
+
+      quill.on('selection-change', (range) => {
+        if (range) {
+          lastRange = range;
+        }
       });
 
       resetBtn.addEventListener('click', () => resetForm());
