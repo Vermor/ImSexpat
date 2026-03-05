@@ -441,6 +441,12 @@ textarea {
   font-size: 0.82rem;
 }
 
+.chip-category {
+  background: var(--chip-bg, #eef3ff);
+  border-color: var(--chip-border, #bcd0ff);
+  color: var(--chip-ink, #27406f);
+}
+
 .article-meta {
   display: flex;
   flex-wrap: wrap;

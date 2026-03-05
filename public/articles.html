@@ -69,6 +69,17 @@
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
 
+      const categoryStyle = (value) => {
+        const text = String(value || '');
+        let hash = 0;
+        for (let i = 0; i < text.length; i += 1) {
+          hash = ((hash << 5) - hash) + text.charCodeAt(i);
+          hash |= 0;
+        }
+        const hue = Math.abs(hash) % 360;
+        return `--chip-bg:hsl(${hue} 85% 94%);--chip-border:hsl(${hue} 50% 78%);--chip-ink:hsl(${hue} 45% 28%);`;
+      };
+
       const closeCategoriesMenu = () => {
         if (!categoriesMenuEl || !categoriesToggleEl) return;
         categoriesMenuEl.hidden = true;
@@ -125,8 +136,7 @@
                   ${Array.isArray(article.categories) && article.categories.length ? `
                     <p class="article-meta">
                       <span class="meta-group">
-                        <strong>Categories:</strong>
-                        ${(article.categories || []).map((c) => `<span class="chip">${escapeHtml(c)}</span>`).join('')}
+                        ${(article.categories || []).map((c) => `<span class="chip chip-category" style="${categoryStyle(c)}">${escapeHtml(c)}</span>`).join('')}
                       </span>
                     </p>
                   ` : ''}
