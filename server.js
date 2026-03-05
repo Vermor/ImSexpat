@@ -315,7 +315,7 @@ const normalizeArticlePayload = (payload, uploadedCoverUrl, currentCover = '') =
   const opinionEnabled = opinionEnabledRaw === true || opinionEnabledRaw === 'true' || opinionEnabledRaw === 'on' || opinionEnabledRaw === '1';
   const opinionQuestion = sanitizeText(payload.opinionQuestion, 180);
   const opinionOptions = String(payload.opinionOptions || '')
-    .split(/\r?\n|,/)
+    .split(/\r?\n/)
     .map((x) => sanitizeText(x, 60))
     .filter(Boolean)
     .filter((x, i, arr) => arr.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i)

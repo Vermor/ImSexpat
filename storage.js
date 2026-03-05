@@ -347,7 +347,7 @@ const normalizeOpinionOptions = (value) => {
       .slice(0, 12);
   }
   return String(value || '')
-    .split(/\r?\n|,/)
+    .split(/\r?\n/)
     .map((x) => x.trim().slice(0, 60))
     .filter(Boolean)
     .filter((x, i, arr) => arr.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i)
