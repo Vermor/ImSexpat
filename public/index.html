@@ -140,7 +140,7 @@
         return `
           <p class="article-meta">
             <span class="meta-group">
-              ${categories.map((x) => `<span class="chip chip-category" style="${categoryStyle(x)}">${escapeHtml(x)}</span>`).join('')}
+              ${categories.map((x) => `<a class="chip chip-category chip-link" style="${categoryStyle(x)}" href="/articles?category=${encodeURIComponent(x)}">${escapeHtml(x)}</a>`).join('')}
             </span>
           </p>
         `;
@@ -161,8 +161,8 @@
               <article class="article-card">
                 ${article.coverImageUrl ? `<a href="/article/${encodeURIComponent(article.slug)}"><img class="article-card-cover" src="${article.coverImageUrl}" alt="${escapeHtml(article.title)}" loading="lazy" /></a>` : ''}
                 <div class="article-card-body">
-                  <h3><a href="/article/${encodeURIComponent(article.slug)}">${escapeHtml(article.title)}</a></h3>
                   ${renderCategoryLine(article)}
+                  <h3><a href="/article/${encodeURIComponent(article.slug)}">${escapeHtml(article.title)}</a></h3>
                   ${article.excerpt ? `<p class="article-excerpt">${escapeHtml(article.excerpt)}</p>` : ''}
                 </div>
               </article>

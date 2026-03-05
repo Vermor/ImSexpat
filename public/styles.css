@@ -447,6 +447,14 @@ textarea {
   color: var(--chip-ink, #27406f);
 }
 
+.chip-link {
+  text-decoration: none;
+}
+
+.chip-link:hover {
+  filter: saturate(1.15);
+}
+
 .article-meta {
   display: flex;
   flex-wrap: wrap;
