@@ -213,11 +213,12 @@ const normalizeArticlePayload = (payload, uploadedCoverUrl, currentCover = '') =
     allowedTags: [
       'p', 'br', 'strong', 'b', 'em', 'i', 'u', 's',
       'h1', 'h2', 'h3', 'h4', 'blockquote', 'ul', 'ol', 'li',
-      'a', 'img', 'hr', 'span', 'code', 'pre'
+      'a', 'img', 'hr', 'span', 'code', 'pre', 'iframe'
     ],
     allowedAttributes: {
       a: ['href', 'target', 'rel'],
       img: ['src', 'alt'],
+      iframe: ['src', 'title', 'width', 'height', 'allow', 'allowfullscreen', 'frameborder', 'referrerpolicy'],
       p: ['style'],
       h1: ['style'],
       h2: ['style'],
@@ -225,6 +226,7 @@ const normalizeArticlePayload = (payload, uploadedCoverUrl, currentCover = '') =
       h4: ['style'],
       span: ['style']
     },
+    allowedIframeHostnames: ['www.youtube.com', 'youtube.com', 'www.youtube-nocookie.com', 'player.vimeo.com'],
     allowedStyles: {
       '*': {
         'text-align': [/^left$/, /^right$/, /^center$/, /^justify$/]
