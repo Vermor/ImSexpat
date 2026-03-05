@@ -385,37 +385,19 @@ textarea {
 }
 
 #rubricsSection {
-  background: linear-gradient(165deg, #f2f7ff, #edf4ff);
+  background: linear-gradient(160deg, #f8f9fc, #f3f6fb);
 }
 
-.rubric-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.9rem;
+.rubric-block {
+  margin-bottom: 1.1rem;
 }
 
-.rubric-tile {
-  background: #e9f1fd;
-  border: 1px solid #c3d3ea;
-  border-radius: 14px;
-  padding: 0.75rem;
+.rubric-block > h3 {
+  margin: 0 0 0.65rem;
 }
 
-.rubric-tile > h3 {
-  margin: 0 0 0.6rem;
-}
-
-.rubric-articles {
-  display: grid;
-  gap: 0.75rem;
-}
-
-.rubric-article-card {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 16px rgba(32, 52, 90, 0.08);
+.rubric-card-grid {
+  grid-template-columns: repeat(var(--rubric-cols, 3), minmax(0, 1fr));
 }
 
 .article-card-grid {
@@ -710,7 +692,6 @@ textarea {
   }
 
   .grid,
-  .rubric-grid,
   .article-card-grid,
   .admin-grid,
   .field-row,

@@ -183,12 +183,13 @@
 
       const renderRubricBlock = (title, articles) => {
         const safeArticles = Array.isArray(articles) ? articles : [];
+        const cols = Math.max(1, Math.min(3, safeArticles.length || 1));
         return `
-          <section class="rubric-tile">
+          <section class="rubric-block">
             <h3>${escapeHtml(title)}</h3>
-            <div class="rubric-articles">
+            <div class="article-card-grid rubric-card-grid" style="--rubric-cols:${cols};">
               ${safeArticles.length ? safeArticles.map((article) => `
-                <article class="rubric-article-card">
+                <article class="article-card">
                   ${article.coverImageUrl ? `<a href="/article/${encodeURIComponent(article.slug)}"><img class="article-card-cover" src="${article.coverImageUrl}" alt="${escapeHtml(article.title)}" loading="lazy" /></a>` : ''}
                   <div class="article-card-body">
                     ${renderCategoryLine(article)}
@@ -233,7 +234,7 @@
 
         const html = blocks.filter(Boolean).join('');
         rubricsSectionEl.hidden = false;
-        rubricsBlocksEl.innerHTML = `<div class="rubric-grid">${html}</div>`;
+        rubricsBlocksEl.innerHTML = html;
       };
 
       const loadLatestArticle = async () => {
