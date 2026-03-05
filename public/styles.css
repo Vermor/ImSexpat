@@ -801,6 +801,7 @@ textarea {
   .grid,
   .rubrics-layout,
   .article-card-grid,
+  .article-card-grid.rubric-card-grid,
   .admin-grid,
   .field-row,
   .media-grid,
@@ -824,5 +825,23 @@ textarea {
 
   .featured-hero-overlay {
     padding: 0.9rem 1rem 1rem;
+  }
+
+  .featured-hero-overlay .article-meta {
+    display: none;
+  }
+
+  .featured-hero-overlay h1 {
+    margin: 0;
+    font-size: clamp(1.7rem, 8.2vw, 2.25rem);
+    line-height: 1.08;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+
+  .featured-hero-excerpt {
+    display: none;
   }
 }
