@@ -215,27 +215,32 @@ const normalizeRubricsPayload = (value) => {
     .slice(0, 8);
 };
 
-const normalizeLandingPayload = (payload) => ({
-  siteName: sanitizeText(payload.siteName, 100) || DEFAULT_LANDING_CONTENT.siteName,
-  pageTitle: sanitizeText(payload.pageTitle, 180) || DEFAULT_LANDING_CONTENT.pageTitle,
-  metaDescription: sanitizeText(payload.metaDescription, 300) || DEFAULT_LANDING_CONTENT.metaDescription,
-  heroTitle: sanitizeText(payload.heroTitle, 180) || DEFAULT_LANDING_CONTENT.heroTitle,
-  heroSubtitle: sanitizeText(payload.heroSubtitle, 500) || DEFAULT_LANDING_CONTENT.heroSubtitle,
-  ctaText: sanitizeText(payload.ctaText, 60) || DEFAULT_LANDING_CONTENT.ctaText,
-  ctaHref: sanitizeText(payload.ctaHref, 200) || DEFAULT_LANDING_CONTENT.ctaHref,
-  card1Title: sanitizeText(payload.card1Title, 120) || DEFAULT_LANDING_CONTENT.card1Title,
-  card1Text: sanitizeText(payload.card1Text, 500) || DEFAULT_LANDING_CONTENT.card1Text,
-  card2Title: sanitizeText(payload.card2Title, 120) || DEFAULT_LANDING_CONTENT.card2Title,
-  card2Text: sanitizeText(payload.card2Text, 500) || DEFAULT_LANDING_CONTENT.card2Text,
-  card3Title: sanitizeText(payload.card3Title, 120) || DEFAULT_LANDING_CONTENT.card3Title,
-  card3Text: sanitizeText(payload.card3Text, 500) || DEFAULT_LANDING_CONTENT.card3Text,
-  footerText: sanitizeText(payload.footerText, 120) || DEFAULT_LANDING_CONTENT.footerText,
-  rubrics: normalizeRubricsPayload(payload.rubrics)
-});
+const normalizeLandingPayload = (payload) => {
+  const safe = payload && typeof payload === 'object' ? payload : {};
+  const out = {};
+  if ('siteName' in safe) out.siteName = sanitizeText(safe.siteName, 100) || DEFAULT_LANDING_CONTENT.siteName;
+  if ('pageTitle' in safe) out.pageTitle = sanitizeText(safe.pageTitle, 180) || DEFAULT_LANDING_CONTENT.pageTitle;
+  if ('metaDescription' in safe) out.metaDescription = sanitizeText(safe.metaDescription, 300) || DEFAULT_LANDING_CONTENT.metaDescription;
+  if ('heroTitle' in safe) out.heroTitle = sanitizeText(safe.heroTitle, 180) || DEFAULT_LANDING_CONTENT.heroTitle;
+  if ('heroSubtitle' in safe) out.heroSubtitle = sanitizeText(safe.heroSubtitle, 500) || DEFAULT_LANDING_CONTENT.heroSubtitle;
+  if ('ctaText' in safe) out.ctaText = sanitizeText(safe.ctaText, 60) || DEFAULT_LANDING_CONTENT.ctaText;
+  if ('ctaHref' in safe) out.ctaHref = sanitizeText(safe.ctaHref, 200) || DEFAULT_LANDING_CONTENT.ctaHref;
+  if ('card1Title' in safe) out.card1Title = sanitizeText(safe.card1Title, 120) || DEFAULT_LANDING_CONTENT.card1Title;
+  if ('card1Text' in safe) out.card1Text = sanitizeText(safe.card1Text, 500) || DEFAULT_LANDING_CONTENT.card1Text;
+  if ('card2Title' in safe) out.card2Title = sanitizeText(safe.card2Title, 120) || DEFAULT_LANDING_CONTENT.card2Title;
+  if ('card2Text' in safe) out.card2Text = sanitizeText(safe.card2Text, 500) || DEFAULT_LANDING_CONTENT.card2Text;
+  if ('card3Title' in safe) out.card3Title = sanitizeText(safe.card3Title, 120) || DEFAULT_LANDING_CONTENT.card3Title;
+  if ('card3Text' in safe) out.card3Text = sanitizeText(safe.card3Text, 500) || DEFAULT_LANDING_CONTENT.card3Text;
+  if ('footerText' in safe) out.footerText = sanitizeText(safe.footerText, 120) || DEFAULT_LANDING_CONTENT.footerText;
+  if ('rubrics' in safe) out.rubrics = normalizeRubricsPayload(safe.rubrics);
+  return out;
+};
 
 const normalizeArticlePayload = (payload, uploadedCoverUrl, currentCover = '') => {
   const publishedRaw = payload.published;
   const published = publishedRaw === true || publishedRaw === 'true' || publishedRaw === 'on' || publishedRaw === '1';
+  const featuredRaw = payload.featured;
+  const featured = featuredRaw === true || featuredRaw === 'true' || featuredRaw === 'on' || featuredRaw === '1';
 
   const nextCover = uploadedCoverUrl || sanitizeText(payload.coverImageUrl, 300) || currentCover || '';
 
@@ -283,6 +288,7 @@ const normalizeArticlePayload = (payload, uploadedCoverUrl, currentCover = '') =
     ogImageUrl: nextCover,
     categories: toCommaList(payload.categories, 400),
     tags: toCommaList(payload.tags, 400),
+    featured,
     published
   };
 };
@@ -339,6 +345,8 @@ app.get('/api/landing', async (req, res) => {
 
 app.get('/api/articles', async (req, res) => {
   try {
+    const featuredRaw = String(req.query.featured || '').trim().toLowerCase();
+    const featuredOnly = featuredRaw === '1' || featuredRaw === 'true' || featuredRaw === 'yes';
     const result = await listArticles({
       page: req.query.page,
       pageSize: req.query.pageSize,
@@ -346,6 +354,7 @@ app.get('/api/articles', async (req, res) => {
       category: req.query.category,
       categories: req.query.categories,
       tag: req.query.tag,
+      featuredOnly,
       publishedOnly: true
     });
     const taxonomies = await getTaxonomies();
@@ -466,12 +475,15 @@ app.get('/api/admin/articles/slug-check', protectAdmin, async (req, res) => {
 
 app.get('/api/admin/articles', protectAdmin, async (req, res) => {
   try {
+    const featuredRaw = String(req.query.featured || '').trim().toLowerCase();
+    const featuredOnly = featuredRaw === '1' || featuredRaw === 'true' || featuredRaw === 'yes';
     const result = await listArticles({
       page: req.query.page,
       pageSize: req.query.pageSize || 25,
       q: req.query.q,
       category: req.query.category,
       tag: req.query.tag,
+      featuredOnly,
       publishedOnly: false
     });
     const taxonomies = await getTaxonomies();

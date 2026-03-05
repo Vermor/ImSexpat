@@ -33,9 +33,8 @@
     </header>
 
     <main>
-      <section class="hero">
-        <h1 id="heroTitle">Vermor Club</h1>
-        <p class="subtitle" id="heroSubtitle">Articles, chroniques et ressources en cours de construction.</p>
+      <section class="hero featured-hero" id="featuredHero">
+        <p class="muted">Chargement de l'article en vedette...</p>
       </section>
 
       <section id="rubricsSection" class="admin-panel article-list-panel latest-article-section" hidden>
@@ -109,8 +108,6 @@
 
         setMetaDescription(content.metaDescription);
         setText('brand', content.siteName);
-        setText('heroTitle', content.heroTitle);
-        setText('heroSubtitle', content.heroSubtitle);
         setText('footerText', content.footerText || content.siteName);
         landingRubrics = Array.isArray(content.rubrics) ? content.rubrics : [];
       };
@@ -179,6 +176,71 @@
             `).join('')}
           </div>
         `;
+      };
+
+      const renderFeaturedHero = (article) => {
+        const heroEl = document.getElementById('featuredHero');
+        if (!heroEl) return;
+
+        if (!article) {
+          heroEl.innerHTML = `
+            <div class="featured-hero-fallback">
+              <h1>Vermor Club</h1>
+              <p class="subtitle">Aucun article en vedette pour le moment.</p>
+            </div>
+          `;
+          return;
+        }
+
+        const title = escapeHtml(article.title || 'Article en vedette');
+        const excerpt = article.excerpt ? `<p class="featured-hero-excerpt">${escapeHtml(article.excerpt)}</p>` : '';
+        const href = `/article/${encodeURIComponent(article.slug)}`;
+
+        if (!article.coverImageUrl) {
+          heroEl.innerHTML = `
+            <a class="featured-hero-link featured-hero-link-no-image" href="${href}">
+              <div class="featured-hero-overlay">
+                ${renderCategoryLine(article)}
+                <h1>${title}</h1>
+                ${excerpt}
+              </div>
+            </a>
+          `;
+          return;
+        }
+
+        heroEl.innerHTML = `
+          <a class="featured-hero-link" href="${href}">
+            <img class="featured-hero-image" src="${article.coverImageUrl}" alt="${title}" loading="eager" />
+            <div class="featured-hero-overlay">
+              ${renderCategoryLine(article)}
+              <h1>${title}</h1>
+              ${excerpt}
+            </div>
+          </a>
+        `;
+      };
+
+      const loadFeaturedArticle = async () => {
+        try {
+          const featuredResponse = await fetch('/api/articles?page=1&pageSize=1&featured=true', { cache: 'no-store' });
+          if (!featuredResponse.ok) throw new Error('Failed to load featured article');
+          const featuredPayload = await featuredResponse.json();
+          const featured = Array.isArray(featuredPayload.items) ? featuredPayload.items[0] : null;
+          if (featured) {
+            renderFeaturedHero(featured);
+            return;
+          }
+
+          const fallbackResponse = await fetch('/api/articles?page=1&pageSize=1', { cache: 'no-store' });
+          if (!fallbackResponse.ok) throw new Error('Failed to load fallback article');
+          const fallbackPayload = await fallbackResponse.json();
+          const fallback = Array.isArray(fallbackPayload.items) ? fallbackPayload.items[0] : null;
+          renderFeaturedHero(fallback || null);
+        } catch (error) {
+          renderFeaturedHero(null);
+          console.error(error);
+        }
       };
 
       const renderRubricBlock = (title, articles) => {
@@ -284,6 +346,7 @@
       loadLandingContent().then(() => loadRubrics().catch(() => {
         if (rubricsSectionEl) rubricsSectionEl.hidden = true;
       }));
+      loadFeaturedArticle();
       loadLatestArticle();
     </script>
   </body>

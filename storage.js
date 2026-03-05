@@ -87,6 +87,7 @@ const mapArticleRow = (row) => ({
   ogImageUrl: row.og_image_url,
   categories: row.categories || [],
   tags: row.tags || [],
+  featured: Boolean(row.featured),
   published: row.published,
   createdAt: row.created_at,
   updatedAt: row.updated_at
@@ -137,6 +138,7 @@ const articlesTableSql = `
     og_image_url TEXT NOT NULL DEFAULT '',
     categories TEXT[] NOT NULL DEFAULT '{}',
     tags TEXT[] NOT NULL DEFAULT '{}',
+    featured BOOLEAN NOT NULL DEFAULT FALSE,
     published BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -213,6 +215,47 @@ const upsertLandingSql = `
     updated_at = NOW();
 `;
 
+const insertLandingIfMissingSql = `
+  INSERT INTO landing_content (
+    id,
+    site_name,
+    page_title,
+    meta_description,
+    hero_title,
+    hero_subtitle,
+    cta_text,
+    cta_href,
+    card1_title,
+    card1_text,
+    card2_title,
+    card2_text,
+    card3_title,
+    card3_text,
+    footer_text,
+    rubrics_json,
+    updated_at
+  ) VALUES (
+    1,
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9,
+    $10,
+    $11,
+    $12,
+    $13,
+    $14,
+    $15,
+    NOW()
+  )
+  ON CONFLICT (id) DO NOTHING;
+`;
+
 const landingValues = (content) => ([
   content.siteName,
   content.pageTitle,
@@ -274,11 +317,12 @@ const initStorage = async () => {
   await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS og_image_url TEXT NOT NULL DEFAULT '';");
   await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS categories TEXT[] NOT NULL DEFAULT '{}';");
   await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';");
+  await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT FALSE;");
   await pool.query('CREATE INDEX IF NOT EXISTS idx_articles_published_updated ON articles(published, updated_at DESC);');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_articles_categories ON articles USING GIN(categories);');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_articles_tags ON articles USING GIN(tags);');
   await pool.query("CREATE INDEX IF NOT EXISTS idx_articles_search ON articles USING GIN (to_tsvector('simple', coalesce(title,'') || ' ' || coalesce(excerpt,'') || ' ' || coalesce(content,'')));");
-  await pool.query(upsertLandingSql, landingValues(DEFAULT_LANDING_CONTENT));
+  await pool.query(insertLandingIfMissingSql, landingValues(DEFAULT_LANDING_CONTENT));
   console.log('PostgreSQL storage ready for landing and articles.');
 };
 
@@ -298,7 +342,8 @@ const getLandingContent = async () => {
 };
 
 const updateLandingContent = async (content) => {
-  const merged = { ...DEFAULT_LANDING_CONTENT, ...content };
+  const base = pool ? await getLandingContent() : inMemoryContent;
+  const merged = { ...DEFAULT_LANDING_CONTENT, ...(base || {}), ...(content || {}) };
 
   if (!pool) {
     inMemoryContent = merged;
@@ -365,11 +410,13 @@ const listArticles = async (options = {}) => {
   const categoryNeedle = category.toLowerCase();
   const categoryNeedles = categories.map((x) => x.toLowerCase());
   const tag = String(options.tag || '').trim();
+  const featuredOnly = Boolean(options.featuredOnly);
   const publishedOnly = Boolean(options.publishedOnly);
 
   if (!pool) {
     let items = [...inMemoryArticles];
     if (publishedOnly) items = items.filter((a) => a.published);
+    if (featuredOnly) items = items.filter((a) => a.featured);
     if (categoryNeedles.length) {
       items = items.filter((a) => (a.categories || []).some((c) => categoryNeedles.includes(String(c || '').toLowerCase())));
     } else if (categoryNeedle) {
@@ -395,6 +442,10 @@ const listArticles = async (options = {}) => {
   if (publishedOnly) {
     values.push(true);
     where.push(`published = $${values.length}`);
+  }
+  if (featuredOnly) {
+    values.push(true);
+    where.push(`featured = $${values.length}`);
   }
   if (categoryNeedles.length) {
     values.push(categoryNeedles);
@@ -502,6 +553,7 @@ const createArticle = async (input) => {
       ogImageUrl: input.ogImageUrl,
       categories,
       tags,
+      featured: input.featured,
       published: input.published,
       createdAt: now,
       updatedAt: now
@@ -513,8 +565,8 @@ const createArticle = async (input) => {
   }
 
   const result = await pool.query(
-    `INSERT INTO articles (title, slug, excerpt, content, cover_image_url, seo_title, seo_description, og_image_url, categories, tags, published, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW()) RETURNING *;`,
+    `INSERT INTO articles (title, slug, excerpt, content, cover_image_url, seo_title, seo_description, og_image_url, categories, tags, featured, published, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()) RETURNING *;`,
     [
       input.title,
       slug,
@@ -526,6 +578,7 @@ const createArticle = async (input) => {
       input.ogImageUrl,
       categories,
       tags,
+      input.featured,
       input.published
     ]
   );
@@ -554,6 +607,7 @@ const updateArticle = async (id, input) => {
       ogImageUrl: input.ogImageUrl,
       categories,
       tags,
+      featured: input.featured,
       published: input.published,
       updatedAt: new Date().toISOString()
     };
@@ -574,9 +628,10 @@ const updateArticle = async (id, input) => {
          og_image_url = $8,
          categories = $9,
          tags = $10,
-         published = $11,
+         featured = $11,
+         published = $12,
          updated_at = NOW()
-     WHERE id = $12
+     WHERE id = $13
      RETURNING *;`,
     [
       input.title,
@@ -589,6 +644,7 @@ const updateArticle = async (id, input) => {
       input.ogImageUrl,
       categories,
       tags,
+      input.featured,
       input.published,
       id
     ]

@@ -120,6 +120,74 @@ main {
   animation: rise 0.8s ease-out;
 }
 
+.featured-hero {
+  padding: 0;
+  overflow: hidden;
+}
+
+.featured-hero-link {
+  position: relative;
+  display: block;
+  min-height: 360px;
+  color: #fff;
+  text-decoration: none;
+  background: #1d2a3f;
+}
+
+.featured-hero-image {
+  width: 100%;
+  height: 100%;
+  min-height: 360px;
+  max-height: 560px;
+  object-fit: cover;
+  display: block;
+}
+
+.featured-hero-overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 1.2rem 1.35rem 1.4rem;
+  background: linear-gradient(to top, rgba(8, 14, 27, 0.88), rgba(8, 14, 27, 0.14));
+  color: #fff;
+}
+
+.featured-hero-overlay h1 {
+  margin: 0.2rem 0 0.4rem;
+  color: #fff;
+}
+
+.featured-hero-excerpt {
+  margin: 0;
+  max-width: 900px;
+  color: rgba(255, 255, 255, 0.93);
+  font-size: 1.06rem;
+  line-height: 1.4;
+}
+
+.featured-hero-overlay .article-meta {
+  margin: 0;
+}
+
+.featured-hero-overlay .chip {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #fff;
+}
+
+.featured-hero-link-no-image {
+  min-height: 220px;
+  background: linear-gradient(135deg, #30436a, #1f2d4c);
+}
+
+.featured-hero-link-no-image .featured-hero-overlay {
+  position: static;
+  background: transparent;
+}
+
+.featured-hero-fallback {
+  padding: 2rem;
+}
+
 h1 {
   margin: 0.5rem 0 1rem;
   font-size: clamp(2rem, 5vw, 3rem);
@@ -730,5 +798,18 @@ textarea {
 
   .hero {
     padding: 1.4rem;
+  }
+
+  .featured-hero {
+    padding: 0;
+  }
+
+  .featured-hero-link,
+  .featured-hero-image {
+    min-height: 240px;
+  }
+
+  .featured-hero-overlay {
+    padding: 0.9rem 1rem 1rem;
   }
 }

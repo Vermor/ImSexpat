@@ -79,6 +79,11 @@
           </div>
 
           <label class="field check-field">
+            <input name="featured" type="checkbox" />
+            <span>En vedette (hero landing)</span>
+          </label>
+
+          <label class="field check-field">
             <input name="published" type="checkbox" />
             <span>Publie</span>
           </label>
@@ -283,6 +288,7 @@
           seoTitle: form.elements.seoTitle.value,
           seoDescription: form.elements.seoDescription.value,
           coverImageUrl: form.elements.coverImageUrl.value,
+          featured: form.elements.featured.checked,
           published: form.elements.published.checked,
           content: quill.root.innerHTML,
           ts: Date.now()
@@ -313,6 +319,7 @@
         form.elements.seoTitle.value = draft.seoTitle || '';
         form.elements.seoDescription.value = draft.seoDescription || '';
         form.elements.coverImageUrl.value = draft.coverImageUrl || '';
+        form.elements.featured.checked = Boolean(draft.featured);
         form.elements.published.checked = Boolean(draft.published);
         quill.root.innerHTML = draft.content || '<p><br></p>';
         dirty = true;
@@ -356,13 +363,14 @@
 
         listEl.innerHTML = items.map((article) => {
           const state = article.published ? 'Publie' : 'Brouillon';
+          const featuredBadge = article.featured ? ' - Vedette' : '';
           const cat = (article.categories || []).join(', ');
           const tag = (article.tags || []).join(', ');
           return `
             <article class="list-item">
               <div>
                 <strong>${escapeHtml(article.title)}</strong>
-                <p class="muted">/${escapeHtml(article.slug)} · ${state}</p>
+                <p class="muted">/${escapeHtml(article.slug)} - ${state}${featuredBadge}</p>
                 ${cat ? `<p class="muted">Categories: ${escapeHtml(cat)}</p>` : ''}
                 ${tag ? `<p class="muted">Tags: ${escapeHtml(tag)}</p>` : ''}
               </div>
@@ -418,6 +426,7 @@
         form.elements.seoDescription.value = article.seoDescription || '';
         quill.root.innerHTML = article.content || '<p><br></p>';
         form.elements.coverImageUrl.value = article.coverImageUrl || article.ogImageUrl || '';
+        form.elements.featured.checked = Boolean(article.featured);
         form.elements.published.checked = Boolean(article.published);
         markClean();
         saveDraft();
@@ -521,6 +530,11 @@
         saveDraft();
       });
 
+      form.elements.featured.addEventListener('change', () => {
+        markDirty();
+        saveDraft();
+      });
+
       quill.on('text-change', () => {
         markDirty();
         saveDraft();
@@ -583,3 +597,4 @@
     </script>
   </body>
 </html>
+
