@@ -725,6 +725,26 @@ textarea {
   gap: 0.55rem;
 }
 
+.opinion-explanations-wrap {
+  margin-top: 1rem;
+}
+
+.opinion-explanations {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.opinion-explanation {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  background: #fff;
+}
+
+.opinion-explanation p {
+  margin: 0.25rem 0 0;
+}
+
 .media-dropzone {
   margin-top: 0.8rem;
   border: 2px dashed var(--line);

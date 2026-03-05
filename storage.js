@@ -174,6 +174,7 @@ const opinionVotesTableSql = `
     article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
     option_id INTEGER NOT NULL REFERENCES article_opinion_options(id) ON DELETE CASCADE,
     voter_key TEXT NOT NULL,
+    explanation TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (article_id, voter_key)
@@ -383,6 +384,7 @@ const initStorage = async () => {
   await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT FALSE;");
   await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS opinion_enabled BOOLEAN NOT NULL DEFAULT FALSE;");
   await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS opinion_question TEXT NOT NULL DEFAULT '';");
+  await pool.query("ALTER TABLE article_opinion_votes ADD COLUMN IF NOT EXISTS explanation TEXT NOT NULL DEFAULT '';");
   await pool.query('CREATE INDEX IF NOT EXISTS idx_articles_published_updated ON articles(published, updated_at DESC);');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_articles_categories ON articles USING GIN(categories);');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_articles_tags ON articles USING GIN(tags);');
@@ -685,7 +687,21 @@ const getArticleOpinion = async (articleId, voterKey = '') => {
       question: String(article.opinionQuestion || ''),
       totalVotes: options.reduce((acc, x) => acc + x.votes, 0),
       userVoteOptionId: userVote ? userVote.optionId : null,
+      userExplanation: userVote ? String(userVote.explanation || '') : '',
       likedOptionIds,
+      explanations: inMemoryOpinionVotes
+        .filter((x) => x.articleId === articleId && String(x.explanation || '').trim())
+        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+        .slice(0, 50)
+        .map((v) => {
+          const opt = inMemoryOpinionOptions.find((o) => o.id === v.optionId);
+          return {
+            optionId: v.optionId,
+            optionLabel: opt ? opt.label : '',
+            explanation: String(v.explanation || ''),
+            updatedAt: v.updatedAt
+          };
+        }),
       options
     };
   }
@@ -733,13 +749,15 @@ const getArticleOpinion = async (articleId, voterKey = '') => {
   }));
 
   let userVoteOptionId = null;
+  let userExplanation = '';
   let likedOptionIds = [];
   if (voterKey) {
     const voteRes = await pool.query(
-      'SELECT option_id FROM article_opinion_votes WHERE article_id = $1 AND voter_key = $2 LIMIT 1;',
+      'SELECT option_id, explanation FROM article_opinion_votes WHERE article_id = $1 AND voter_key = $2 LIMIT 1;',
       [articleId, voterKey]
     );
     userVoteOptionId = voteRes.rowCount ? Number(voteRes.rows[0].option_id) : null;
+    userExplanation = voteRes.rowCount ? String(voteRes.rows[0].explanation || '') : '';
 
     const likeRes = await pool.query(
       `SELECT l.option_id
@@ -751,12 +769,29 @@ const getArticleOpinion = async (articleId, voterKey = '') => {
     likedOptionIds = likeRes.rows.map((x) => Number(x.option_id));
   }
 
+  const explanationsRes = await pool.query(
+    `SELECT v.option_id, v.explanation, v.updated_at, o.label AS option_label
+     FROM article_opinion_votes v
+     INNER JOIN article_opinion_options o ON o.id = v.option_id
+     WHERE v.article_id = $1 AND trim(v.explanation) <> ''
+     ORDER BY v.updated_at DESC
+     LIMIT 50;`,
+    [articleId]
+  );
+
   return {
     enabled: Boolean(article.opinion_enabled),
     question: String(article.opinion_question || ''),
     totalVotes: options.reduce((acc, x) => acc + x.votes, 0),
     userVoteOptionId,
+    userExplanation,
     likedOptionIds,
+    explanations: explanationsRes.rows.map((x) => ({
+      optionId: Number(x.option_id),
+      optionLabel: String(x.option_label || ''),
+      explanation: String(x.explanation || ''),
+      updatedAt: x.updated_at
+    })),
     options
   };
 };
@@ -767,7 +802,9 @@ const submitArticleOpinionVote = async (articleId, voterKey, input = {}) => {
 
   const optionId = Number(input.optionId || 0) || null;
   const customLabel = String(input.customLabel || '').trim().slice(0, 60);
-  const customDescription = String(input.customDescription || '').trim().slice(0, 240);
+  const customDescription = String(input.customDescription || '').trim().slice(0, 500);
+  const hasExplanation = Object.prototype.hasOwnProperty.call(input, 'explanation');
+  const explanation = String(input.explanation || '').trim().slice(0, 500);
   const hasCustom = Boolean(customLabel);
 
   if (!hasCustom && !optionId) {
@@ -813,6 +850,7 @@ const submitArticleOpinionVote = async (articleId, voterKey, input = {}) => {
     const existingVote = inMemoryOpinionVotes.find((v) => v.articleId === articleId && v.voterKey === safeVoterKey);
     if (existingVote) {
       existingVote.optionId = found.id;
+      if (hasExplanation) existingVote.explanation = explanation;
       existingVote.updatedAt = new Date().toISOString();
     } else {
       inMemoryOpinionVotes.push({
@@ -820,6 +858,7 @@ const submitArticleOpinionVote = async (articleId, voterKey, input = {}) => {
         articleId,
         optionId: found.id,
         voterKey: safeVoterKey,
+        explanation: hasExplanation ? explanation : '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
@@ -874,13 +913,23 @@ const submitArticleOpinionVote = async (articleId, voterKey, input = {}) => {
   );
   if (optionCheck.rowCount === 0) throw new Error('Invalid option');
 
-  await pool.query(
-    `INSERT INTO article_opinion_votes (article_id, option_id, voter_key, updated_at)
-     VALUES ($1, $2, $3, NOW())
-     ON CONFLICT (article_id, voter_key)
-     DO UPDATE SET option_id = EXCLUDED.option_id, updated_at = NOW();`,
-    [articleId, targetOptionId, safeVoterKey]
-  );
+  if (hasExplanation) {
+    await pool.query(
+      `INSERT INTO article_opinion_votes (article_id, option_id, voter_key, explanation, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (article_id, voter_key)
+       DO UPDATE SET option_id = EXCLUDED.option_id, explanation = EXCLUDED.explanation, updated_at = NOW();`,
+      [articleId, targetOptionId, safeVoterKey, explanation]
+    );
+  } else {
+    await pool.query(
+      `INSERT INTO article_opinion_votes (article_id, option_id, voter_key, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (article_id, voter_key)
+       DO UPDATE SET option_id = EXCLUDED.option_id, updated_at = NOW();`,
+      [articleId, targetOptionId, safeVoterKey]
+    );
+  }
 
   return getArticleOpinion(articleId, safeVoterKey);
 };

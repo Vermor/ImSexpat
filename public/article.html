@@ -49,6 +49,17 @@
           <h2 id="opinionQuestion">Votre opinion</h2>
           <p id="opinionStatus" class="muted"></p>
           <div id="opinionOptions" class="opinion-options"></div>
+          <form id="opinionExplanationForm" class="opinion-custom-form" hidden>
+            <h3>Ajouter une explication (optionnel)</h3>
+            <label class="field">
+              <span>Ton explication (max 500)</span>
+              <textarea id="voteExplanationInput" rows="3" maxlength="500" placeholder="Pourquoi ce choix ?"></textarea>
+            </label>
+            <div class="opinion-actions">
+              <button class="btn btn-primary" type="submit">Enregistrer mon explication</button>
+              <button id="skipExplanationBtn" class="btn btn-ghost" type="button">Passer</button>
+            </div>
+          </form>
           <form id="opinionCustomForm" class="opinion-custom-form">
             <h3>Autre proposition</h3>
             <label class="field">
@@ -56,11 +67,15 @@
               <input id="customOptionLabel" type="text" maxlength="60" required />
             </label>
             <label class="field">
-              <span>Opinion (max 240)</span>
-              <textarea id="customOptionDescription" rows="3" maxlength="240" required></textarea>
+              <span>Explication (max 500)</span>
+              <textarea id="customOptionDescription" rows="3" maxlength="500" required></textarea>
             </label>
             <button class="btn btn-primary" type="submit">Proposer et voter</button>
           </form>
+          <section class="opinion-explanations-wrap">
+            <h3>Explications des lecteurs</h3>
+            <div id="opinionExplanations" class="opinion-explanations"></div>
+          </section>
         </section>
       </article>
     </main>
@@ -78,6 +93,10 @@
       const opinionQuestionEl = document.getElementById('opinionQuestion');
       const opinionStatusEl = document.getElementById('opinionStatus');
       const opinionOptionsEl = document.getElementById('opinionOptions');
+      const opinionExplanationsEl = document.getElementById('opinionExplanations');
+      const opinionExplanationFormEl = document.getElementById('opinionExplanationForm');
+      const voteExplanationInputEl = document.getElementById('voteExplanationInput');
+      const skipExplanationBtnEl = document.getElementById('skipExplanationBtn');
       const opinionCustomFormEl = document.getElementById('opinionCustomForm');
       const customOptionLabelEl = document.getElementById('customOptionLabel');
       const customOptionDescriptionEl = document.getElementById('customOptionDescription');
@@ -158,6 +177,8 @@
         opinionStatusEl.className = isError ? 'error' : 'muted';
       };
 
+      let currentVotedOptionId = 0;
+
       const renderOpinion = (snapshot) => {
         if (!opinionBlockEl || !opinionOptionsEl || !snapshot || !snapshot.enabled) {
           if (opinionBlockEl) opinionBlockEl.hidden = true;
@@ -169,14 +190,19 @@
         const totalVotes = Number(snapshot.totalVotes || 0);
         setOpinionNotice(totalVotes ? `${totalVotes} vote(s)` : 'Soyez le premier a voter.');
 
-        const liked = new Set(Array.isArray(snapshot.likedOptionIds) ? snapshot.likedOptionIds.map(Number) : []);
         const selected = Number(snapshot.userVoteOptionId || 0) || 0;
+        currentVotedOptionId = selected || currentVotedOptionId;
+        if (opinionExplanationFormEl) {
+          opinionExplanationFormEl.hidden = !selected;
+        }
+        if (voteExplanationInputEl && selected) {
+          voteExplanationInputEl.value = String(snapshot.userExplanation || '');
+        }
         const options = Array.isArray(snapshot.options) ? snapshot.options : [];
         opinionOptionsEl.innerHTML = options.length ? options.map((opt) => {
           const voteCount = Number(opt.votes || 0);
           const pct = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
           const isSelected = selected === Number(opt.id);
-          const isLiked = liked.has(Number(opt.id));
           return `
             <article class="opinion-option ${isSelected ? 'opinion-selected' : ''}">
               <div class="opinion-option-head">
@@ -187,11 +213,22 @@
               <div class="opinion-bar"><span style="width:${pct}%;"></span></div>
               <div class="opinion-actions">
                 <button class="btn btn-ghost" type="button" data-opinion-vote="${opt.id}">${isSelected ? 'Vote actuel' : 'Voter'}</button>
-                <button class="btn btn-ghost" type="button" data-opinion-like="${opt.id}">${isLiked ? 'Unlike' : 'Like'} (${Number(opt.likes || 0)})</button>
               </div>
             </article>
           `;
         }).join('') : '<p class="muted">Aucun choix disponible.</p>';
+
+        if (opinionExplanationsEl) {
+          const explanations = Array.isArray(snapshot.explanations) ? snapshot.explanations : [];
+          opinionExplanationsEl.innerHTML = explanations.length
+            ? explanations.map((x) => `
+              <article class="opinion-explanation">
+                <strong>${escapeHtml(x.optionLabel || '')}</strong>
+                <p>${escapeHtml(x.explanation || '')}</p>
+              </article>
+            `).join('')
+            : '<p class="muted">Aucune explication pour le moment.</p>';
+        }
       };
 
       const loadOpinion = async () => {
@@ -274,32 +311,18 @@
       if (opinionOptionsEl) {
         opinionOptionsEl.addEventListener('click', async (event) => {
           const voteId = Number(event.target.getAttribute('data-opinion-vote') || 0);
-          const likeId = Number(event.target.getAttribute('data-opinion-like') || 0);
-          if (!voteId && !likeId) return;
+          if (!voteId) return;
 
           try {
-            if (voteId) {
-              const response = await fetch(`/api/articles/${encodeURIComponent(slug)}/opinion/vote`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ optionId: voteId })
-              });
-              const payload = await response.json();
-              if (!response.ok) throw new Error(payload.error || 'Vote impossible');
-              renderOpinion(payload.snapshot);
-              setOpinionNotice('Vote enregistre.');
-              return;
-            }
-
-            const response = await fetch(`/api/articles/${encodeURIComponent(slug)}/opinion/like`, {
+            const response = await fetch(`/api/articles/${encodeURIComponent(slug)}/opinion/vote`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ optionId: likeId })
+              body: JSON.stringify({ optionId: voteId })
             });
             const payload = await response.json();
-            if (!response.ok) throw new Error(payload.error || 'Like impossible');
+            if (!response.ok) throw new Error(payload.error || 'Vote impossible');
             renderOpinion(payload.snapshot);
-            setOpinionNotice(payload.liked ? 'Like ajoute.' : 'Like retire.');
+            setOpinionNotice('Vote enregistre. Tu peux ajouter une explication (optionnel).');
           } catch (error) {
             setOpinionNotice(error.message || 'Erreur', true);
           }
@@ -326,10 +349,43 @@
             renderOpinion(payload.snapshot);
             customOptionLabelEl.value = '';
             customOptionDescriptionEl.value = '';
-            setOpinionNotice('Opinion enregistree.');
+            setOpinionNotice('Vote enregistre. Tu peux ajouter une explication (optionnel).');
           } catch (error) {
             setOpinionNotice(error.message || 'Erreur', true);
           }
+        });
+      }
+
+      if (opinionExplanationFormEl) {
+        opinionExplanationFormEl.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (!currentVotedOptionId) {
+            setOpinionNotice('Vote dabord pour ajouter une explication.', true);
+            return;
+          }
+          try {
+            const response = await fetch(`/api/articles/${encodeURIComponent(slug)}/opinion/vote`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                optionId: currentVotedOptionId,
+                explanation: String(voteExplanationInputEl.value || '').trim()
+              })
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.error || 'Impossible denregistrer lexplication');
+            renderOpinion(payload.snapshot);
+            setOpinionNotice('Explication enregistree.');
+          } catch (error) {
+            setOpinionNotice(error.message || 'Erreur', true);
+          }
+        });
+      }
+
+      if (skipExplanationBtnEl) {
+        skipExplanationBtnEl.addEventListener('click', () => {
+          if (opinionExplanationFormEl) opinionExplanationFormEl.hidden = true;
+          setOpinionNotice('OK, vote enregistre sans explication.');
         });
       }
 

@@ -19,7 +19,6 @@ const {
   getArticleOpinionPresetOptions,
   getArticleOpinion,
   submitArticleOpinionVote,
-  toggleArticleOpinionLike,
   createArticle,
   updateArticle,
   deleteArticle,
@@ -450,7 +449,9 @@ app.post('/api/articles/:slug/opinion/vote', opinionRateLimit, async (req, res) 
     const voterKey = getOpinionVoterKey(req, res);
     const optionId = Number(req.body.optionId || 0) || null;
     const customLabel = sanitizeText(req.body.customLabel, 60);
-    const customDescription = sanitizeText(req.body.customDescription, 240);
+    const customDescription = sanitizeText(req.body.customDescription, 500);
+    const hasExplanation = Object.prototype.hasOwnProperty.call(req.body || {}, 'explanation');
+    const explanation = sanitizeText(req.body.explanation, 500);
     if (!optionId && !customLabel) {
       return res.status(400).json({ error: 'Choix requis' });
     }
@@ -461,7 +462,9 @@ app.post('/api/articles/:slug/opinion/vote', opinionRateLimit, async (req, res) 
     const snapshot = await submitArticleOpinionVote(article.id, voterKey, {
       optionId,
       customLabel,
-      customDescription
+      customDescription,
+      ...(customLabel ? { explanation: customDescription } : {}),
+      ...(hasExplanation ? { explanation } : {})
     });
     return res.json({ ok: true, snapshot });
   } catch (error) {
@@ -470,23 +473,6 @@ app.post('/api/articles/:slug/opinion/vote', opinionRateLimit, async (req, res) 
     if (message.includes('Invalid option')) return res.status(400).json({ error: 'Choix invalide' });
     console.error('Failed to submit vote:', error);
     return res.status(500).json({ error: 'Erreur lors de lenregistrement du vote' });
-  }
-});
-
-app.post('/api/articles/:slug/opinion/like', opinionRateLimit, async (req, res) => {
-  try {
-    const article = await getArticleBySlug(req.params.slug);
-    if (!article) return res.status(404).json({ error: 'Article not found' });
-    const optionId = Number(req.body.optionId || 0) || 0;
-    if (!optionId) return res.status(400).json({ error: 'Choix invalide' });
-    const voterKey = getOpinionVoterKey(req, res);
-    const out = await toggleArticleOpinionLike(article.id, optionId, voterKey);
-    return res.json({ ok: true, liked: out.liked, snapshot: out.snapshot });
-  } catch (error) {
-    const message = String(error && error.message || '');
-    if (message.includes('Invalid option')) return res.status(400).json({ error: 'Choix invalide' });
-    console.error('Failed to toggle like:', error);
-    return res.status(500).json({ error: 'Erreur lors du like' });
   }
 });
 
