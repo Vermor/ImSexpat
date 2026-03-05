@@ -424,6 +424,14 @@ textarea {
   gap: 0.9rem;
 }
 
+.article-card-grid.rubric-card-grid {
+  grid-template-columns: repeat(var(--rubric-cols, 3), minmax(0, 1fr));
+}
+
+.rubric-block-single .rubric-card-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .article-card {
   background: var(--paper);
   border: 1px solid var(--line);
