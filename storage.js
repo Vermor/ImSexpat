@@ -175,6 +175,7 @@ const opinionVotesTableSql = `
     option_id INTEGER NOT NULL REFERENCES article_opinion_options(id) ON DELETE CASCADE,
     voter_key TEXT NOT NULL,
     explanation TEXT NOT NULL DEFAULT '',
+    choice_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (article_id, voter_key)
@@ -355,6 +356,8 @@ const normalizeOpinionOptions = (value) => {
     .slice(0, 12);
 };
 
+const OPINION_CHANGE_COOLDOWN_MS = 10 * 60 * 1000;
+
 const initStorage = async () => {
   pool = createPool();
 
@@ -385,6 +388,7 @@ const initStorage = async () => {
   await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS opinion_enabled BOOLEAN NOT NULL DEFAULT FALSE;");
   await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS opinion_question TEXT NOT NULL DEFAULT '';");
   await pool.query("ALTER TABLE article_opinion_votes ADD COLUMN IF NOT EXISTS explanation TEXT NOT NULL DEFAULT '';");
+  await pool.query("ALTER TABLE article_opinion_votes ADD COLUMN IF NOT EXISTS choice_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();");
   await pool.query('CREATE INDEX IF NOT EXISTS idx_articles_published_updated ON articles(published, updated_at DESC);');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_articles_categories ON articles USING GIN(categories);');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_articles_tags ON articles USING GIN(tags);');
@@ -821,17 +825,38 @@ const submitArticleOpinionVote = async (articleId, voterKey, input = {}) => {
   if (!pool) {
     const article = inMemoryArticles.find((x) => x.id === articleId) || null;
     if (!article || !article.opinionEnabled) throw new Error('Opinion feature disabled');
+    const existingVote = inMemoryOpinionVotes.find((v) => v.articleId === articleId && v.voterKey === safeVoterKey) || null;
+
+    const checkCooldown = (nextOptionId) => {
+      if (!existingVote) return;
+      const optionChanged = Number(existingVote.optionId) !== Number(nextOptionId);
+      if (!optionChanged) return;
+      const lastChoiceTs = new Date(existingVote.choiceUpdatedAt || existingVote.updatedAt || existingVote.createdAt || Date.now()).getTime();
+      const waitMs = Math.max(0, OPINION_CHANGE_COOLDOWN_MS - (Date.now() - lastChoiceTs));
+      if (waitMs > 0) {
+        const error = new Error('Vote change cooldown');
+        error.code = 'VOTE_CHANGE_COOLDOWN';
+        error.waitMs = waitMs;
+        throw error;
+      }
+    };
 
     let targetOptionId = optionId;
     if (hasCustom) {
       const existingByLabel = inMemoryOpinionOptions.find((x) => x.articleId === articleId && x.label.toLowerCase() === customLabel.toLowerCase());
       if (existingByLabel) {
+        checkCooldown(existingByLabel.id);
         targetOptionId = existingByLabel.id;
       } else {
         const existingMine = inMemoryOpinionOptions.find((x) => x.articleId === articleId && x.createdByUser && x.creatorKey === safeVoterKey);
         if (existingMine) {
           throw new Error('Custom option already exists for this voter');
         } else {
+          // Creating a new option always implies switching to this option.
+          // Enforce cooldown before creating to avoid orphan options.
+          if (existingVote) {
+            checkCooldown(Number.MAX_SAFE_INTEGER);
+          }
           targetOptionId = inMemoryOpinionOptionId;
           inMemoryOpinionOptions.push({
             id: inMemoryOpinionOptionId,
@@ -850,15 +875,17 @@ const submitArticleOpinionVote = async (articleId, voterKey, input = {}) => {
 
     const found = inMemoryOpinionOptions.find((x) => x.id === targetOptionId && x.articleId === articleId);
     if (!found) throw new Error('Invalid option');
-
-    const existingVote = inMemoryOpinionVotes.find((v) => v.articleId === articleId && v.voterKey === safeVoterKey);
     if (existingVote) {
       const optionChanged = Number(existingVote.optionId) !== Number(found.id);
+      checkCooldown(found.id);
       existingVote.optionId = found.id;
       if (hasExplanation) {
         existingVote.explanation = explanation;
       } else if (optionChanged) {
         existingVote.explanation = '';
+      }
+      if (optionChanged) {
+        existingVote.choiceUpdatedAt = new Date().toISOString();
       }
       existingVote.updatedAt = new Date().toISOString();
     } else {
@@ -868,6 +895,7 @@ const submitArticleOpinionVote = async (articleId, voterKey, input = {}) => {
         optionId: found.id,
         voterKey: safeVoterKey,
         explanation: hasExplanation ? explanation : '',
+        choiceUpdatedAt: new Date().toISOString(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
@@ -881,6 +909,25 @@ const submitArticleOpinionVote = async (articleId, voterKey, input = {}) => {
   if (articleRes.rowCount === 0) throw new Error('Article not found');
   if (!articleRes.rows[0].opinion_enabled) throw new Error('Opinion feature disabled');
 
+  const existingVoteRes = await pool.query(
+    'SELECT option_id, choice_updated_at, updated_at, created_at FROM article_opinion_votes WHERE article_id = $1 AND voter_key = $2 LIMIT 1;',
+    [articleId, safeVoterKey]
+  );
+  const existingVote = existingVoteRes.rowCount ? existingVoteRes.rows[0] : null;
+  const checkCooldownDb = (nextOptionId) => {
+    if (!existingVote) return;
+    const optionChanged = Number(existingVote.option_id) !== Number(nextOptionId);
+    if (!optionChanged) return;
+    const lastChoiceTs = new Date(existingVote.choice_updated_at || existingVote.updated_at || existingVote.created_at || Date.now()).getTime();
+    const waitMs = Math.max(0, OPINION_CHANGE_COOLDOWN_MS - (Date.now() - lastChoiceTs));
+    if (waitMs > 0) {
+      const error = new Error('Vote change cooldown');
+      error.code = 'VOTE_CHANGE_COOLDOWN';
+      error.waitMs = waitMs;
+      throw error;
+    }
+  };
+
   let targetOptionId = optionId;
   if (hasCustom) {
     const byLabelRes = await pool.query(
@@ -888,6 +935,7 @@ const submitArticleOpinionVote = async (articleId, voterKey, input = {}) => {
       [articleId, customLabel]
     );
     if (byLabelRes.rowCount) {
+      checkCooldownDb(Number(byLabelRes.rows[0].id));
       targetOptionId = Number(byLabelRes.rows[0].id);
     } else {
       const mineRes = await pool.query(
@@ -899,6 +947,11 @@ const submitArticleOpinionVote = async (articleId, voterKey, input = {}) => {
       if (mineRes.rowCount) {
         throw new Error('Custom option already exists for this voter');
       } else {
+        // Creating a new option always implies switching vote to it.
+        // Enforce cooldown before insert to avoid creating orphan options.
+        if (existingVote) {
+          checkCooldownDb(Number.MAX_SAFE_INTEGER);
+        }
         const createdRes = await pool.query(
           `INSERT INTO article_opinion_options (article_id, label, description, created_by_user, creator_key, updated_at)
            VALUES ($1, $2, $3, true, $4, NOW())
@@ -915,25 +968,37 @@ const submitArticleOpinionVote = async (articleId, voterKey, input = {}) => {
     [targetOptionId, articleId]
   );
   if (optionCheck.rowCount === 0) throw new Error('Invalid option');
+  checkCooldownDb(targetOptionId);
 
   if (hasExplanation) {
     await pool.query(
-      `INSERT INTO article_opinion_votes (article_id, option_id, voter_key, explanation, updated_at)
-       VALUES ($1, $2, $3, $4, NOW())
+      `INSERT INTO article_opinion_votes (article_id, option_id, voter_key, explanation, choice_updated_at, updated_at)
+       VALUES ($1, $2, $3, $4, NOW(), NOW())
        ON CONFLICT (article_id, voter_key)
-       DO UPDATE SET option_id = EXCLUDED.option_id, explanation = EXCLUDED.explanation, updated_at = NOW();`,
+       DO UPDATE SET
+         option_id = EXCLUDED.option_id,
+         explanation = EXCLUDED.explanation,
+         choice_updated_at = CASE
+           WHEN article_opinion_votes.option_id <> EXCLUDED.option_id THEN NOW()
+           ELSE article_opinion_votes.choice_updated_at
+         END,
+         updated_at = NOW();`,
       [articleId, targetOptionId, safeVoterKey, explanation]
     );
   } else {
     await pool.query(
-      `INSERT INTO article_opinion_votes (article_id, option_id, voter_key, updated_at)
-       VALUES ($1, $2, $3, NOW())
+      `INSERT INTO article_opinion_votes (article_id, option_id, voter_key, choice_updated_at, updated_at)
+       VALUES ($1, $2, $3, NOW(), NOW())
        ON CONFLICT (article_id, voter_key)
        DO UPDATE SET
          option_id = EXCLUDED.option_id,
          explanation = CASE
            WHEN article_opinion_votes.option_id <> EXCLUDED.option_id THEN ''
            ELSE article_opinion_votes.explanation
+         END,
+         choice_updated_at = CASE
+           WHEN article_opinion_votes.option_id <> EXCLUDED.option_id THEN NOW()
+           ELSE article_opinion_votes.choice_updated_at
          END,
          updated_at = NOW();`,
       [articleId, targetOptionId, safeVoterKey]
