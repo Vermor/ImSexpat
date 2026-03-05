@@ -6,9 +6,12 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <title>Article | Vermor Club</title>
     <meta name="description" content="" />
+    <link rel="canonical" href="" />
+    <meta property="og:type" content="article" />
     <meta property="og:title" content="" />
     <meta property="og:description" content="" />
     <meta property="og:image" content="" />
+    <meta property="og:url" content="" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -169,9 +172,6 @@
           excerptEl.textContent = article.excerpt || '';
           document.title = article.seoTitle || article.title || 'Article | Vermor Club';
           setMeta('meta[name=\"description\"]', article.seoDescription || article.excerpt || '');
-          setMeta('meta[property=\"og:title\"]', article.seoTitle || article.title || '');
-          setMeta('meta[property=\"og:description\"]', article.seoDescription || article.excerpt || '');
-          setMeta('meta[property=\"og:image\"]', article.ogImageUrl || article.coverImageUrl || '');
 
           let contentHtml = article.content || '<p>Contenu vide.</p>';
           if (article.coverImageUrl) {

@@ -290,6 +290,7 @@ app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.ht
 app.get('/articles', (req, res) => res.sendFile(path.join(__dirname, 'public', 'articles.html')));
 app.get('/article/:slug', async (req, res) => {
   try {
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
     const filePath = path.join(__dirname, 'public', 'article.html');
     const html = await fs.promises.readFile(filePath, 'utf8');
     const article = await getArticleBySlug(req.params.slug);
@@ -300,11 +301,12 @@ app.get('/article/:slug', async (req, res) => {
     const title = article.seoTitle || article.title || 'Article | Vermor Club';
     const description = article.seoDescription || article.excerpt || '';
     const imageUrl = toAbsoluteUrl(article.ogImageUrl || article.coverImageUrl || '', req);
-    const pageUrl = toAbsoluteUrl(req.originalUrl || req.path || '/', req);
+    const pageUrl = toAbsoluteUrl(req.path || '/', req);
 
     let output = html;
     output = output.replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(title)}</title>`);
     output = replaceMeta(output, /<meta\s+name="description"\s+content="[^"]*"\s*\/?>/i, `<meta name="description" content="${escapeHtml(description)}" />`);
+    output = replaceMeta(output, /<link\s+rel="canonical"\s+href="[^"]*"\s*\/?>/i, `<link rel="canonical" href="${escapeHtml(pageUrl)}" />`);
     output = replaceMeta(output, /<meta\s+property="og:title"\s+content="[^"]*"\s*\/?>/i, `<meta property="og:title" content="${escapeHtml(title)}" />`);
     output = replaceMeta(output, /<meta\s+property="og:description"\s+content="[^"]*"\s*\/?>/i, `<meta property="og:description" content="${escapeHtml(description)}" />`);
     output = replaceMeta(output, /<meta\s+property="og:image"\s+content="[^"]*"\s*\/?>/i, `<meta property="og:image" content="${escapeHtml(imageUrl)}" />`);
