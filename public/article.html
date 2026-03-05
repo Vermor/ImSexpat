@@ -187,7 +187,8 @@
 
       let currentVotedOptionId = 0;
       let customFormOpen = false;
-      let explanationFormOpen = false;
+      let explanationClosedForOptionId = 0;
+      let lastRenderedVoteOptionId = 0;
 
       const renderOpinion = (snapshot) => {
         if (!opinionBlockEl || !opinionOptionsEl || !snapshot || !snapshot.enabled) {
@@ -202,9 +203,15 @@
 
         const selected = Number(snapshot.userVoteOptionId || 0) || 0;
         const userCustomOptionId = Number(snapshot.userCustomOptionId || 0) || 0;
+        if (selected !== lastRenderedVoteOptionId) {
+          explanationClosedForOptionId = 0;
+        }
+        lastRenderedVoteOptionId = selected;
         currentVotedOptionId = selected || currentVotedOptionId;
         const selectedOption = (Array.isArray(snapshot.options) ? snapshot.options : []).find((x) => Number(x.id) === selected) || null;
         const canExplain = Boolean(selected && selectedOption && !selectedOption.isMine);
+        const hasSavedExplanation = Boolean(String(snapshot.userExplanation || '').trim());
+        const shouldShowExplanationForm = canExplain && !hasSavedExplanation && explanationClosedForOptionId !== selected;
         const canAddCustom = !userCustomOptionId;
 
         if (openCustomOptionBtnEl) {
@@ -220,10 +227,9 @@
         }
 
         if (opinionExplanationFormEl) {
-          explanationFormOpen = canExplain;
-          opinionExplanationFormEl.hidden = !canExplain;
+          opinionExplanationFormEl.hidden = !shouldShowExplanationForm;
         }
-        if (voteExplanationInputEl && canExplain) {
+        if (voteExplanationInputEl) {
           voteExplanationInputEl.value = String(snapshot.userExplanation || '');
         }
         const options = Array.isArray(snapshot.options) ? snapshot.options : [];
@@ -412,9 +418,9 @@
             });
             const payload = await response.json();
             if (!response.ok) throw new Error(payload.error || 'Impossible denregistrer lexplication');
+            explanationClosedForOptionId = currentVotedOptionId;
             renderOpinion(payload.snapshot);
             setOpinionNotice('Explication enregistree.');
-            explanationFormOpen = false;
             if (opinionExplanationFormEl) opinionExplanationFormEl.hidden = true;
           } catch (error) {
             setOpinionNotice(error.message || 'Erreur', true);
@@ -424,8 +430,10 @@
 
       if (skipExplanationBtnEl) {
         skipExplanationBtnEl.addEventListener('click', () => {
+          explanationClosedForOptionId = currentVotedOptionId;
           if (voteExplanationInputEl) voteExplanationInputEl.value = '';
           setOpinionNotice('OK, vote enregistre sans explication.');
+          if (opinionExplanationFormEl) opinionExplanationFormEl.hidden = true;
         });
       }
 

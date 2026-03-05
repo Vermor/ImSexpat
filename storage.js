@@ -853,8 +853,13 @@ const submitArticleOpinionVote = async (articleId, voterKey, input = {}) => {
 
     const existingVote = inMemoryOpinionVotes.find((v) => v.articleId === articleId && v.voterKey === safeVoterKey);
     if (existingVote) {
+      const optionChanged = Number(existingVote.optionId) !== Number(found.id);
       existingVote.optionId = found.id;
-      if (hasExplanation) existingVote.explanation = explanation;
+      if (hasExplanation) {
+        existingVote.explanation = explanation;
+      } else if (optionChanged) {
+        existingVote.explanation = '';
+      }
       existingVote.updatedAt = new Date().toISOString();
     } else {
       inMemoryOpinionVotes.push({
@@ -924,7 +929,13 @@ const submitArticleOpinionVote = async (articleId, voterKey, input = {}) => {
       `INSERT INTO article_opinion_votes (article_id, option_id, voter_key, updated_at)
        VALUES ($1, $2, $3, NOW())
        ON CONFLICT (article_id, voter_key)
-       DO UPDATE SET option_id = EXCLUDED.option_id, updated_at = NOW();`,
+       DO UPDATE SET
+         option_id = EXCLUDED.option_id,
+         explanation = CASE
+           WHEN article_opinion_votes.option_id <> EXCLUDED.option_id THEN ''
+           ELSE article_opinion_votes.explanation
+         END,
+         updated_at = NOW();`,
       [articleId, targetOptionId, safeVoterKey]
     );
   }
