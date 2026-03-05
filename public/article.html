@@ -51,7 +51,6 @@
           <div id="opinionOptions" class="opinion-options"></div>
           <div class="opinion-actions">
             <button id="openCustomOptionBtn" class="btn btn-ghost" type="button">Proposer mon propre choix</button>
-            <button id="openExplanationBtn" class="btn btn-ghost" type="button" hidden>Ajouter une explication</button>
           </div>
           <form id="opinionExplanationForm" class="opinion-custom-form" hidden>
             <h3>Ajouter une explication (optionnel)</h3>
@@ -74,7 +73,10 @@
               <span>Explication (max 500)</span>
               <textarea id="customOptionDescription" rows="3" maxlength="500" required></textarea>
             </label>
-            <button class="btn btn-primary" type="submit">Proposer et voter</button>
+            <div class="opinion-actions">
+              <button class="btn btn-primary" type="submit">Proposer et voter</button>
+              <button id="cancelCustomOptionBtn" class="btn btn-ghost" type="button">Annuler</button>
+            </div>
           </form>
           <section class="opinion-explanations-wrap">
             <h3>Explications des lecteurs</h3>
@@ -102,7 +104,7 @@
       const voteExplanationInputEl = document.getElementById('voteExplanationInput');
       const skipExplanationBtnEl = document.getElementById('skipExplanationBtn');
       const openCustomOptionBtnEl = document.getElementById('openCustomOptionBtn');
-      const openExplanationBtnEl = document.getElementById('openExplanationBtn');
+      const cancelCustomOptionBtnEl = document.getElementById('cancelCustomOptionBtn');
       const opinionCustomFormEl = document.getElementById('opinionCustomForm');
       const customOptionLabelEl = document.getElementById('customOptionLabel');
       const customOptionDescriptionEl = document.getElementById('customOptionDescription');
@@ -203,12 +205,13 @@
         currentVotedOptionId = selected || currentVotedOptionId;
         const selectedOption = (Array.isArray(snapshot.options) ? snapshot.options : []).find((x) => Number(x.id) === selected) || null;
         const canExplain = Boolean(selected && selectedOption && !selectedOption.isMine);
+        const canAddCustom = !userCustomOptionId;
 
         if (openCustomOptionBtnEl) {
-          openCustomOptionBtnEl.hidden = Boolean(userCustomOptionId);
+          openCustomOptionBtnEl.hidden = !canAddCustom;
         }
         if (opinionCustomFormEl) {
-          if (userCustomOptionId) {
+          if (!canAddCustom) {
             customFormOpen = false;
             opinionCustomFormEl.hidden = true;
           } else {
@@ -216,19 +219,9 @@
           }
         }
 
-        if (openExplanationBtnEl) {
-          openExplanationBtnEl.hidden = !canExplain;
-          openExplanationBtnEl.textContent = String(snapshot.userExplanation || '').trim()
-            ? 'Modifier mon explication'
-            : 'Ajouter une explication';
-        }
         if (opinionExplanationFormEl) {
-          if (!canExplain) {
-            explanationFormOpen = false;
-            opinionExplanationFormEl.hidden = true;
-          } else {
-            opinionExplanationFormEl.hidden = !explanationFormOpen;
-          }
+          explanationFormOpen = canExplain;
+          opinionExplanationFormEl.hidden = !canExplain;
         }
         if (voteExplanationInputEl && canExplain) {
           voteExplanationInputEl.value = String(snapshot.userExplanation || '');
@@ -361,6 +354,8 @@
               ? payload.snapshot.options.find((x) => Number(x.id) === Number(payload.snapshot.userVoteOptionId || 0))
               : null;
             const canExplain = Boolean(selectedOption && !selectedOption.isMine);
+            customFormOpen = false;
+            if (opinionCustomFormEl) opinionCustomFormEl.hidden = true;
             setOpinionNotice(canExplain
               ? 'Vote enregistre. Tu peux ajouter une explication.'
               : 'Vote enregistre.');
@@ -429,8 +424,7 @@
 
       if (skipExplanationBtnEl) {
         skipExplanationBtnEl.addEventListener('click', () => {
-          explanationFormOpen = false;
-          if (opinionExplanationFormEl) opinionExplanationFormEl.hidden = true;
+          if (voteExplanationInputEl) voteExplanationInputEl.value = '';
           setOpinionNotice('OK, vote enregistre sans explication.');
         });
       }
@@ -442,10 +436,12 @@
         });
       }
 
-      if (openExplanationBtnEl) {
-        openExplanationBtnEl.addEventListener('click', () => {
-          explanationFormOpen = true;
-          if (opinionExplanationFormEl) opinionExplanationFormEl.hidden = false;
+      if (cancelCustomOptionBtnEl) {
+        cancelCustomOptionBtnEl.addEventListener('click', () => {
+          customFormOpen = false;
+          if (opinionCustomFormEl) opinionCustomFormEl.hidden = true;
+          if (customOptionLabelEl) customOptionLabelEl.value = '';
+          if (customOptionDescriptionEl) customOptionDescriptionEl.value = '';
         });
       }
 
