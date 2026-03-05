@@ -253,7 +253,7 @@ const normalizeArticlePayload = (payload, uploadedCoverUrl, currentCover = '') =
     coverImageUrl: nextCover,
     seoTitle,
     seoDescription,
-    ogImageUrl: sanitizeText(payload.ogImageUrl, 300) || nextCover,
+    ogImageUrl: nextCover,
     categories: toCommaList(payload.categories, 400),
     tags: toCommaList(payload.tags, 400),
     published

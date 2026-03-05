@@ -62,8 +62,11 @@
             <textarea name="seoDescription" rows="2" placeholder="Description SEO (sinon resume)"></textarea>
           </label>
           <label class="field">
-            <span>OG image URL (optionnel)</span>
-            <input name="ogImageUrl" type="text" placeholder="https://..." />
+            <span>Image de couverture (egalement utilisee pour SEO/OG)</span>
+            <div class="editor-toolbar-row">
+              <button id="openCoverMediaPickerBtn" class="btn btn-ghost" type="button">Choisir depuis Media</button>
+            </div>
+            <input name="coverImageUrl" type="text" placeholder="https://... ou /uploads/..." />
           </label>
 
           <div class="field">
@@ -73,17 +76,6 @@
             </div>
             <div id="contentEditor" class="rich-editor"></div>
             <input name="content" type="hidden" />
-          </div>
-
-          <div class="field-row">
-            <label class="field">
-              <span>Image de couverture (URL optionnelle)</span>
-              <input name="coverImageUrl" type="text" placeholder="https://..." />
-            </label>
-            <label class="field">
-              <span>Upload image de couverture (max 8MB)</span>
-              <input name="coverImage" type="file" accept="image/*" />
-            </label>
           </div>
 
           <label class="field check-field">
@@ -142,6 +134,7 @@
       const runFilterBtn = document.getElementById('runFilterBtn');
       const pagerRow = document.getElementById('pagerRow');
       const openMediaPickerBtn = document.getElementById('openMediaPickerBtn');
+      const openCoverMediaPickerBtn = document.getElementById('openCoverMediaPickerBtn');
       const closeMediaPickerBtn = document.getElementById('closeMediaPickerBtn');
       const mediaPickerModal = document.getElementById('mediaPickerModal');
       const mediaPickerGrid = document.getElementById('mediaPickerGrid');
@@ -151,6 +144,7 @@
       let slugTimer = null;
       let currentPage = 1;
       let lastRange = null;
+      let mediaPickerTarget = 'content';
 
       const quill = new Quill('#contentEditor', {
         theme: 'snow',
@@ -195,7 +189,8 @@
         `).join('');
       };
 
-      const openMediaPicker = async () => {
+      const openMediaPicker = async (target = 'content') => {
+        mediaPickerTarget = target;
         const current = quill.getSelection();
         if (current) lastRange = current;
         mediaPickerModal.hidden = false;
@@ -287,7 +282,6 @@
           tags: form.elements.tags.value,
           seoTitle: form.elements.seoTitle.value,
           seoDescription: form.elements.seoDescription.value,
-          ogImageUrl: form.elements.ogImageUrl.value,
           coverImageUrl: form.elements.coverImageUrl.value,
           published: form.elements.published.checked,
           content: quill.root.innerHTML,
@@ -318,7 +312,6 @@
         form.elements.tags.value = draft.tags || '';
         form.elements.seoTitle.value = draft.seoTitle || '';
         form.elements.seoDescription.value = draft.seoDescription || '';
-        form.elements.ogImageUrl.value = draft.ogImageUrl || '';
         form.elements.coverImageUrl.value = draft.coverImageUrl || '';
         form.elements.published.checked = Boolean(draft.published);
         quill.root.innerHTML = draft.content || '<p><br></p>';
@@ -423,9 +416,8 @@
         form.elements.tags.value = (article.tags || []).join(', ');
         form.elements.seoTitle.value = article.seoTitle || '';
         form.elements.seoDescription.value = article.seoDescription || '';
-        form.elements.ogImageUrl.value = article.ogImageUrl || '';
         quill.root.innerHTML = article.content || '<p><br></p>';
-        form.elements.coverImageUrl.value = article.coverImageUrl || '';
+        form.elements.coverImageUrl.value = article.coverImageUrl || article.ogImageUrl || '';
         form.elements.published.checked = Boolean(article.published);
         markClean();
         saveDraft();
@@ -517,7 +509,7 @@
         });
       });
 
-      ['excerpt', 'categories', 'tags', 'seoTitle', 'seoDescription', 'ogImageUrl', 'coverImageUrl'].forEach((name) => {
+      ['excerpt', 'categories', 'tags', 'seoTitle', 'seoDescription', 'coverImageUrl'].forEach((name) => {
         form.elements[name].addEventListener('input', () => {
           markDirty();
           saveDraft();
@@ -558,7 +550,11 @@
       }
 
       openMediaPickerBtn.addEventListener('click', () => {
-        openMediaPicker().catch((error) => alert(error.message));
+        openMediaPicker('content').catch((error) => alert(error.message));
+      });
+
+      openCoverMediaPickerBtn.addEventListener('click', () => {
+        openMediaPicker('cover').catch((error) => alert(error.message));
       });
 
       closeMediaPickerBtn.addEventListener('click', closeMediaPicker);
@@ -571,7 +567,13 @@
       mediaPickerGrid.addEventListener('click', (event) => {
         const url = event.target.getAttribute('data-insert-url');
         if (!url) return;
-        insertImageAtCursor(url);
+        if (mediaPickerTarget === 'cover') {
+          form.elements.coverImageUrl.value = url;
+          markDirty();
+          saveDraft();
+        } else {
+          insertImageAtCursor(url);
+        }
         closeMediaPicker();
       });
 
