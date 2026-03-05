@@ -52,6 +52,20 @@
             </label>
           </div>
 
+          <h2>Module opinion</h2>
+          <label class="field check-field">
+            <input name="opinionEnabled" type="checkbox" />
+            <span>Activer les opinions sur cet article</span>
+          </label>
+          <label class="field">
+            <span>Question (max 180)</span>
+            <input name="opinionQuestion" type="text" maxlength="180" placeholder="Ex: Quelle position te semble la plus juste ?" />
+          </label>
+          <label class="field">
+            <span>Choix initiaux (1 par ligne, max 60)</span>
+            <textarea name="opinionOptions" rows="4" maxlength="1200" placeholder="Option 1&#10;Option 2&#10;Option 3"></textarea>
+          </label>
+
           <h2>SEO</h2>
           <label class="field">
             <span>SEO title</span>
@@ -288,6 +302,9 @@
           seoTitle: form.elements.seoTitle.value,
           seoDescription: form.elements.seoDescription.value,
           coverImageUrl: form.elements.coverImageUrl.value,
+          opinionEnabled: form.elements.opinionEnabled.checked,
+          opinionQuestion: form.elements.opinionQuestion.value,
+          opinionOptions: form.elements.opinionOptions.value,
           featured: form.elements.featured.checked,
           published: form.elements.published.checked,
           content: quill.root.innerHTML,
@@ -319,6 +336,9 @@
         form.elements.seoTitle.value = draft.seoTitle || '';
         form.elements.seoDescription.value = draft.seoDescription || '';
         form.elements.coverImageUrl.value = draft.coverImageUrl || '';
+        form.elements.opinionEnabled.checked = Boolean(draft.opinionEnabled);
+        form.elements.opinionQuestion.value = draft.opinionQuestion || '';
+        form.elements.opinionOptions.value = draft.opinionOptions || '';
         form.elements.featured.checked = Boolean(draft.featured);
         form.elements.published.checked = Boolean(draft.published);
         quill.root.innerHTML = draft.content || '<p><br></p>';
@@ -364,13 +384,14 @@
         listEl.innerHTML = items.map((article) => {
           const state = article.published ? 'Publie' : 'Brouillon';
           const featuredBadge = article.featured ? ' - Vedette' : '';
+          const opinionBadge = article.opinionEnabled ? ' - Opinion active' : '';
           const cat = (article.categories || []).join(', ');
           const tag = (article.tags || []).join(', ');
           return `
             <article class="list-item">
               <div>
                 <strong>${escapeHtml(article.title)}</strong>
-                <p class="muted">/${escapeHtml(article.slug)} - ${state}${featuredBadge}</p>
+                <p class="muted">/${escapeHtml(article.slug)} - ${state}${featuredBadge}${opinionBadge}</p>
                 ${cat ? `<p class="muted">Categories: ${escapeHtml(cat)}</p>` : ''}
                 ${tag ? `<p class="muted">Tags: ${escapeHtml(tag)}</p>` : ''}
               </div>
@@ -426,6 +447,9 @@
         form.elements.seoDescription.value = article.seoDescription || '';
         quill.root.innerHTML = article.content || '<p><br></p>';
         form.elements.coverImageUrl.value = article.coverImageUrl || article.ogImageUrl || '';
+        form.elements.opinionEnabled.checked = Boolean(article.opinionEnabled);
+        form.elements.opinionQuestion.value = article.opinionQuestion || '';
+        form.elements.opinionOptions.value = Array.isArray(article.opinionOptions) ? article.opinionOptions.join('\n') : '';
         form.elements.featured.checked = Boolean(article.featured);
         form.elements.published.checked = Boolean(article.published);
         markClean();
@@ -518,7 +542,7 @@
         });
       });
 
-      ['excerpt', 'categories', 'tags', 'seoTitle', 'seoDescription', 'coverImageUrl'].forEach((name) => {
+      ['excerpt', 'categories', 'tags', 'seoTitle', 'seoDescription', 'coverImageUrl', 'opinionQuestion', 'opinionOptions'].forEach((name) => {
         form.elements[name].addEventListener('input', () => {
           markDirty();
           saveDraft();
@@ -531,6 +555,11 @@
       });
 
       form.elements.featured.addEventListener('change', () => {
+        markDirty();
+        saveDraft();
+      });
+
+      form.elements.opinionEnabled.addEventListener('change', () => {
         markDirty();
         saveDraft();
       });

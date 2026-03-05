@@ -4,6 +4,7 @@ const cookieParser = require('cookie-parser');
 const multer = require('multer');
 const sanitizeHtml = require('sanitize-html');
 const sharp = require('sharp');
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const {
@@ -15,6 +16,10 @@ const {
   getTaxonomies,
   getArticleById,
   getArticleBySlug,
+  getArticleOpinionPresetOptions,
+  getArticleOpinion,
+  submitArticleOpinionVote,
+  toggleArticleOpinionLike,
   createArticle,
   updateArticle,
   deleteArticle,
@@ -166,6 +171,45 @@ const toAbsoluteUrl = (value, req) => {
   return `${origin}/${raw}`;
 };
 
+const opinionRateWindowMs = 60 * 1000;
+const opinionRateMax = 15;
+const opinionRateStore = new Map();
+
+const getOrCreateSessionId = (req, res) => {
+  let sid = String(req.signedCookies.vc_sid || '').trim();
+  if (sid && /^[a-z0-9]{32,80}$/i.test(sid)) return sid;
+  sid = crypto.randomBytes(24).toString('hex');
+  res.cookie('vc_sid', sid, {
+    httpOnly: true,
+    signed: true,
+    sameSite: 'lax',
+    secure: isProd,
+    maxAge: 1000 * 60 * 60 * 24 * 365
+  });
+  return sid;
+};
+
+const getOpinionVoterKey = (req, res) => {
+  const sid = getOrCreateSessionId(req, res);
+  const ip = String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim();
+  const ua = String(req.headers['user-agent'] || '').slice(0, 200);
+  const secret = String(process.env.COOKIE_SECRET || 'local-dev-secret');
+  return crypto.createHmac('sha256', secret).update(`${sid}|${ip}|${ua}`).digest('hex');
+};
+
+const opinionRateLimit = (req, res, next) => {
+  const key = getOpinionVoterKey(req, res);
+  const now = Date.now();
+  const windowStart = now - opinionRateWindowMs;
+  const history = (opinionRateStore.get(key) || []).filter((ts) => ts >= windowStart);
+  if (history.length >= opinionRateMax) {
+    return res.status(429).json({ error: 'Trop de requetes. Reessaie dans une minute.' });
+  }
+  history.push(now);
+  opinionRateStore.set(key, history);
+  return next();
+};
+
 const replaceMeta = (html, pattern, nextTag) => {
   if (pattern.test(html)) {
     return html.replace(pattern, nextTag);
@@ -267,6 +311,15 @@ const normalizeArticlePayload = (payload, uploadedCoverUrl, currentCover = '') =
 
   const seoTitle = sanitizeText(payload.seoTitle, 180) || sanitizeText(payload.title, 180);
   const seoDescription = sanitizeText(payload.seoDescription, 320) || sanitizeText(payload.excerpt, 320);
+  const opinionEnabledRaw = payload.opinionEnabled;
+  const opinionEnabled = opinionEnabledRaw === true || opinionEnabledRaw === 'true' || opinionEnabledRaw === 'on' || opinionEnabledRaw === '1';
+  const opinionQuestion = sanitizeText(payload.opinionQuestion, 180);
+  const opinionOptions = String(payload.opinionOptions || '')
+    .split(/\r?\n|,/)
+    .map((x) => sanitizeText(x, 60))
+    .filter(Boolean)
+    .filter((x, i, arr) => arr.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i)
+    .slice(0, 12);
 
   return {
     title: sanitizeText(payload.title, 180),
@@ -279,6 +332,9 @@ const normalizeArticlePayload = (payload, uploadedCoverUrl, currentCover = '') =
     ogImageUrl: nextCover,
     categories: toCommaList(payload.categories, 400),
     tags: toCommaList(payload.tags, 400),
+    opinionEnabled,
+    opinionQuestion,
+    opinionOptions,
     featured,
     published
   };
@@ -370,6 +426,67 @@ app.get('/api/articles/:slug', async (req, res) => {
   } catch (error) {
     console.error('Failed to load article:', error);
     res.status(500).json({ error: 'Failed to load article' });
+  }
+});
+
+app.get('/api/articles/:slug/opinion', async (req, res) => {
+  try {
+    const article = await getArticleBySlug(req.params.slug);
+    if (!article) return res.status(404).json({ error: 'Article not found' });
+    const voterKey = getOpinionVoterKey(req, res);
+    const snapshot = await getArticleOpinion(article.id, voterKey);
+    if (!snapshot) return res.status(404).json({ error: 'Opinion not found' });
+    res.json(snapshot);
+  } catch (error) {
+    console.error('Failed to load article opinion:', error);
+    res.status(500).json({ error: 'Failed to load opinion' });
+  }
+});
+
+app.post('/api/articles/:slug/opinion/vote', opinionRateLimit, async (req, res) => {
+  try {
+    const article = await getArticleBySlug(req.params.slug);
+    if (!article) return res.status(404).json({ error: 'Article not found' });
+    const voterKey = getOpinionVoterKey(req, res);
+    const optionId = Number(req.body.optionId || 0) || null;
+    const customLabel = sanitizeText(req.body.customLabel, 60);
+    const customDescription = sanitizeText(req.body.customDescription, 240);
+    if (!optionId && !customLabel) {
+      return res.status(400).json({ error: 'Choix requis' });
+    }
+    if (customLabel && !customDescription) {
+      return res.status(400).json({ error: 'Description requise pour un nouveau choix' });
+    }
+
+    const snapshot = await submitArticleOpinionVote(article.id, voterKey, {
+      optionId,
+      customLabel,
+      customDescription
+    });
+    return res.json({ ok: true, snapshot });
+  } catch (error) {
+    const message = String(error && error.message || '');
+    if (message.includes('disabled')) return res.status(400).json({ error: 'Fonction opinion non active pour cet article' });
+    if (message.includes('Invalid option')) return res.status(400).json({ error: 'Choix invalide' });
+    console.error('Failed to submit vote:', error);
+    return res.status(500).json({ error: 'Erreur lors de lenregistrement du vote' });
+  }
+});
+
+app.post('/api/articles/:slug/opinion/like', opinionRateLimit, async (req, res) => {
+  try {
+    const article = await getArticleBySlug(req.params.slug);
+    if (!article) return res.status(404).json({ error: 'Article not found' });
+    const optionId = Number(req.body.optionId || 0) || 0;
+    if (!optionId) return res.status(400).json({ error: 'Choix invalide' });
+    const voterKey = getOpinionVoterKey(req, res);
+    const out = await toggleArticleOpinionLike(article.id, optionId, voterKey);
+    return res.json({ ok: true, liked: out.liked, snapshot: out.snapshot });
+  } catch (error) {
+    const message = String(error && error.message || '');
+    if (message.includes('Invalid option')) return res.status(400).json({ error: 'Choix invalide' });
+    console.error('Failed to toggle like:', error);
+    return res.status(500).json({ error: 'Erreur lors du like' });
   }
 });
 
@@ -493,7 +610,8 @@ app.get('/api/admin/articles/:id', protectAdmin, async (req, res) => {
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid article id' });
     const article = await getArticleById(id);
     if (!article) return res.status(404).json({ error: 'Article not found' });
-    res.json(article);
+    const presetOptions = await getArticleOpinionPresetOptions(id);
+    res.json({ ...article, opinionOptions: presetOptions });
   } catch (error) {
     console.error('Failed to load admin article:', error);
     res.status(500).json({ error: 'Failed to load admin article' });

@@ -23,6 +23,12 @@ let inMemoryContent = { ...DEFAULT_LANDING_CONTENT };
 let inMemoryArticles = [];
 let inMemoryArticleId = 1;
 let inMemoryLogs = [];
+let inMemoryOpinionOptions = [];
+let inMemoryOpinionOptionId = 1;
+let inMemoryOpinionVotes = [];
+let inMemoryOpinionVoteId = 1;
+let inMemoryOpinionLikes = [];
+let inMemoryOpinionLikeId = 1;
 
 const createPool = () => {
   const databaseUrl = String(process.env.DATABASE_URL || '').trim();
@@ -88,6 +94,8 @@ const mapArticleRow = (row) => ({
   categories: row.categories || [],
   tags: row.tags || [],
   featured: Boolean(row.featured),
+  opinionEnabled: Boolean(row.opinion_enabled),
+  opinionQuestion: row.opinion_question || '',
   published: row.published,
   createdAt: row.created_at,
   updatedAt: row.updated_at
@@ -139,9 +147,46 @@ const articlesTableSql = `
     categories TEXT[] NOT NULL DEFAULT '{}',
     tags TEXT[] NOT NULL DEFAULT '{}',
     featured BOOLEAN NOT NULL DEFAULT FALSE,
+    opinion_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    opinion_question TEXT NOT NULL DEFAULT '',
     published BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+`;
+
+const opinionOptionsTableSql = `
+  CREATE TABLE IF NOT EXISTS article_opinion_options (
+    id SERIAL PRIMARY KEY,
+    article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    created_by_user BOOLEAN NOT NULL DEFAULT FALSE,
+    creator_key TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+`;
+
+const opinionVotesTableSql = `
+  CREATE TABLE IF NOT EXISTS article_opinion_votes (
+    id SERIAL PRIMARY KEY,
+    article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+    option_id INTEGER NOT NULL REFERENCES article_opinion_options(id) ON DELETE CASCADE,
+    voter_key TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (article_id, voter_key)
+  );
+`;
+
+const opinionLikesTableSql = `
+  CREATE TABLE IF NOT EXISTS article_opinion_likes (
+    id SERIAL PRIMARY KEY,
+    option_id INTEGER NOT NULL REFERENCES article_opinion_options(id) ON DELETE CASCADE,
+    voter_key TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (option_id, voter_key)
   );
 `;
 
@@ -294,6 +339,21 @@ const normalizeList = (value) => {
     .slice(0, 12);
 };
 
+const normalizeOpinionOptions = (value) => {
+  if (Array.isArray(value)) {
+    return [...new Set(value
+      .map((x) => String(x || '').trim().slice(0, 60))
+      .filter(Boolean))]
+      .slice(0, 12);
+  }
+  return String(value || '')
+    .split(/\r?\n|,/)
+    .map((x) => x.trim().slice(0, 60))
+    .filter(Boolean)
+    .filter((x, i, arr) => arr.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i)
+    .slice(0, 12);
+};
+
 const initStorage = async () => {
   pool = createPool();
 
@@ -311,6 +371,9 @@ const initStorage = async () => {
   await pool.query(landingTableSql);
   await pool.query(articlesTableSql);
   await pool.query(logsTableSql);
+  await pool.query(opinionOptionsTableSql);
+  await pool.query(opinionVotesTableSql);
+  await pool.query(opinionLikesTableSql);
   await pool.query("ALTER TABLE landing_content ADD COLUMN IF NOT EXISTS rubrics_json TEXT NOT NULL DEFAULT '[]';");
   await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS seo_title TEXT NOT NULL DEFAULT '';");
   await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS seo_description TEXT NOT NULL DEFAULT '';");
@@ -318,10 +381,15 @@ const initStorage = async () => {
   await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS categories TEXT[] NOT NULL DEFAULT '{}';");
   await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';");
   await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT FALSE;");
+  await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS opinion_enabled BOOLEAN NOT NULL DEFAULT FALSE;");
+  await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS opinion_question TEXT NOT NULL DEFAULT '';");
   await pool.query('CREATE INDEX IF NOT EXISTS idx_articles_published_updated ON articles(published, updated_at DESC);');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_articles_categories ON articles USING GIN(categories);');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_articles_tags ON articles USING GIN(tags);');
   await pool.query("CREATE INDEX IF NOT EXISTS idx_articles_search ON articles USING GIN (to_tsvector('simple', coalesce(title,'') || ' ' || coalesce(excerpt,'') || ' ' || coalesce(content,'')));");
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_opinion_options_article ON article_opinion_options(article_id, created_at DESC);');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_opinion_votes_article ON article_opinion_votes(article_id);');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_opinion_likes_option ON article_opinion_likes(option_id);');
   await pool.query(insertLandingIfMissingSql, landingValues(DEFAULT_LANDING_CONTENT));
   console.log('PostgreSQL storage ready for landing and articles.');
 };
@@ -534,11 +602,346 @@ const getArticleBySlug = async (slug) => {
   return mapArticleRow(result.rows[0]);
 };
 
+const syncOpinionPresetOptions = async (articleId, options = []) => {
+  const safeOptions = normalizeOpinionOptions(options);
+
+  if (!pool) {
+    inMemoryOpinionOptions = inMemoryOpinionOptions.filter((x) => !(x.articleId === articleId && !x.createdByUser));
+    safeOptions.forEach((label) => {
+      inMemoryOpinionOptions.push({
+        id: inMemoryOpinionOptionId,
+        articleId,
+        label,
+        description: '',
+        createdByUser: false,
+        creatorKey: '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      inMemoryOpinionOptionId += 1;
+    });
+    return safeOptions;
+  }
+
+  await pool.query('DELETE FROM article_opinion_options WHERE article_id = $1 AND created_by_user = false;', [articleId]);
+  for (const label of safeOptions) {
+    await pool.query(
+      `INSERT INTO article_opinion_options (article_id, label, description, created_by_user, creator_key, updated_at)
+       VALUES ($1, $2, '', false, '', NOW());`,
+      [articleId, label]
+    );
+  }
+  return safeOptions;
+};
+
+const getArticleOpinionPresetOptions = async (articleId) => {
+  if (!pool) {
+    return inMemoryOpinionOptions
+      .filter((x) => x.articleId === articleId && !x.createdByUser)
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+      .map((x) => x.label);
+  }
+
+  const result = await pool.query(
+    `SELECT label FROM article_opinion_options
+     WHERE article_id = $1 AND created_by_user = false
+     ORDER BY created_at ASC;`,
+    [articleId]
+  );
+  return result.rows.map((x) => String(x.label || ''));
+};
+
+const getArticleOpinion = async (articleId, voterKey = '') => {
+  if (!pool) {
+    const article = inMemoryArticles.find((x) => x.id === articleId) || null;
+    if (!article) return null;
+    const options = inMemoryOpinionOptions
+      .filter((x) => x.articleId === articleId)
+      .sort((a, b) => Number(a.createdByUser) - Number(b.createdByUser) || new Date(a.createdAt) - new Date(b.createdAt))
+      .map((opt) => {
+        const votes = inMemoryOpinionVotes.filter((v) => v.optionId === opt.id).length;
+        const likes = inMemoryOpinionLikes.filter((l) => l.optionId === opt.id).length;
+        return {
+          id: opt.id,
+          label: opt.label,
+          description: opt.description,
+          createdByUser: opt.createdByUser,
+          votes,
+          likes
+        };
+      });
+
+    const userVote = voterKey
+      ? (inMemoryOpinionVotes.find((v) => v.articleId === articleId && v.voterKey === voterKey) || null)
+      : null;
+    const likedOptionIds = voterKey
+      ? inMemoryOpinionLikes
+        .filter((x) => x.voterKey === voterKey && options.some((o) => o.id === x.optionId))
+        .map((x) => x.optionId)
+      : [];
+
+    return {
+      enabled: Boolean(article.opinionEnabled),
+      question: String(article.opinionQuestion || ''),
+      totalVotes: options.reduce((acc, x) => acc + x.votes, 0),
+      userVoteOptionId: userVote ? userVote.optionId : null,
+      likedOptionIds,
+      options
+    };
+  }
+
+  const articleRes = await pool.query(
+    'SELECT opinion_enabled, opinion_question FROM articles WHERE id = $1 LIMIT 1;',
+    [articleId]
+  );
+  if (articleRes.rowCount === 0) return null;
+  const article = articleRes.rows[0];
+
+  const optionsRes = await pool.query(
+    `SELECT id, label, description, created_by_user, created_at
+     FROM article_opinion_options
+     WHERE article_id = $1
+     ORDER BY created_by_user ASC, created_at ASC;`,
+    [articleId]
+  );
+
+  const voteCountsRes = await pool.query(
+    `SELECT option_id, COUNT(*)::int AS count
+     FROM article_opinion_votes
+     WHERE article_id = $1
+     GROUP BY option_id;`,
+    [articleId]
+  );
+  const likeCountsRes = await pool.query(
+    `SELECT l.option_id, COUNT(*)::int AS count
+     FROM article_opinion_likes l
+     INNER JOIN article_opinion_options o ON o.id = l.option_id
+     WHERE o.article_id = $1
+     GROUP BY l.option_id;`,
+    [articleId]
+  );
+
+  const voteCountMap = new Map(voteCountsRes.rows.map((x) => [Number(x.option_id), Number(x.count)]));
+  const likeCountMap = new Map(likeCountsRes.rows.map((x) => [Number(x.option_id), Number(x.count)]));
+  const options = optionsRes.rows.map((x) => ({
+    id: x.id,
+    label: x.label,
+    description: x.description || '',
+    createdByUser: Boolean(x.created_by_user),
+    votes: voteCountMap.get(Number(x.id)) || 0,
+    likes: likeCountMap.get(Number(x.id)) || 0
+  }));
+
+  let userVoteOptionId = null;
+  let likedOptionIds = [];
+  if (voterKey) {
+    const voteRes = await pool.query(
+      'SELECT option_id FROM article_opinion_votes WHERE article_id = $1 AND voter_key = $2 LIMIT 1;',
+      [articleId, voterKey]
+    );
+    userVoteOptionId = voteRes.rowCount ? Number(voteRes.rows[0].option_id) : null;
+
+    const likeRes = await pool.query(
+      `SELECT l.option_id
+       FROM article_opinion_likes l
+       INNER JOIN article_opinion_options o ON o.id = l.option_id
+       WHERE o.article_id = $1 AND l.voter_key = $2;`,
+      [articleId, voterKey]
+    );
+    likedOptionIds = likeRes.rows.map((x) => Number(x.option_id));
+  }
+
+  return {
+    enabled: Boolean(article.opinion_enabled),
+    question: String(article.opinion_question || ''),
+    totalVotes: options.reduce((acc, x) => acc + x.votes, 0),
+    userVoteOptionId,
+    likedOptionIds,
+    options
+  };
+};
+
+const submitArticleOpinionVote = async (articleId, voterKey, input = {}) => {
+  const safeVoterKey = String(voterKey || '').trim();
+  if (!safeVoterKey) throw new Error('Missing voter key');
+
+  const optionId = Number(input.optionId || 0) || null;
+  const customLabel = String(input.customLabel || '').trim().slice(0, 60);
+  const customDescription = String(input.customDescription || '').trim().slice(0, 240);
+  const hasCustom = Boolean(customLabel);
+
+  if (!hasCustom && !optionId) {
+    throw new Error('Option is required');
+  }
+
+  if (!pool) {
+    const article = inMemoryArticles.find((x) => x.id === articleId) || null;
+    if (!article || !article.opinionEnabled) throw new Error('Opinion feature disabled');
+
+    let targetOptionId = optionId;
+    if (hasCustom) {
+      const existingByLabel = inMemoryOpinionOptions.find((x) => x.articleId === articleId && x.label.toLowerCase() === customLabel.toLowerCase());
+      if (existingByLabel) {
+        targetOptionId = existingByLabel.id;
+      } else {
+        const existingMine = inMemoryOpinionOptions.find((x) => x.articleId === articleId && x.createdByUser && x.creatorKey === safeVoterKey);
+        if (existingMine) {
+          existingMine.label = customLabel;
+          existingMine.description = customDescription;
+          existingMine.updatedAt = new Date().toISOString();
+          targetOptionId = existingMine.id;
+        } else {
+          targetOptionId = inMemoryOpinionOptionId;
+          inMemoryOpinionOptions.push({
+            id: inMemoryOpinionOptionId,
+            articleId,
+            label: customLabel,
+            description: customDescription,
+            createdByUser: true,
+            creatorKey: safeVoterKey,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+          inMemoryOpinionOptionId += 1;
+        }
+      }
+    }
+
+    const found = inMemoryOpinionOptions.find((x) => x.id === targetOptionId && x.articleId === articleId);
+    if (!found) throw new Error('Invalid option');
+
+    const existingVote = inMemoryOpinionVotes.find((v) => v.articleId === articleId && v.voterKey === safeVoterKey);
+    if (existingVote) {
+      existingVote.optionId = found.id;
+      existingVote.updatedAt = new Date().toISOString();
+    } else {
+      inMemoryOpinionVotes.push({
+        id: inMemoryOpinionVoteId,
+        articleId,
+        optionId: found.id,
+        voterKey: safeVoterKey,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      inMemoryOpinionVoteId += 1;
+    }
+
+    return getArticleOpinion(articleId, safeVoterKey);
+  }
+
+  const articleRes = await pool.query('SELECT id, opinion_enabled FROM articles WHERE id = $1 LIMIT 1;', [articleId]);
+  if (articleRes.rowCount === 0) throw new Error('Article not found');
+  if (!articleRes.rows[0].opinion_enabled) throw new Error('Opinion feature disabled');
+
+  let targetOptionId = optionId;
+  if (hasCustom) {
+    const byLabelRes = await pool.query(
+      'SELECT id FROM article_opinion_options WHERE article_id = $1 AND lower(label) = lower($2) LIMIT 1;',
+      [articleId, customLabel]
+    );
+    if (byLabelRes.rowCount) {
+      targetOptionId = Number(byLabelRes.rows[0].id);
+    } else {
+      const mineRes = await pool.query(
+        `SELECT id FROM article_opinion_options
+         WHERE article_id = $1 AND created_by_user = true AND creator_key = $2
+         LIMIT 1;`,
+        [articleId, safeVoterKey]
+      );
+      if (mineRes.rowCount) {
+        targetOptionId = Number(mineRes.rows[0].id);
+        await pool.query(
+          `UPDATE article_opinion_options
+           SET label = $1, description = $2, updated_at = NOW()
+           WHERE id = $3;`,
+          [customLabel, customDescription, targetOptionId]
+        );
+      } else {
+        const createdRes = await pool.query(
+          `INSERT INTO article_opinion_options (article_id, label, description, created_by_user, creator_key, updated_at)
+           VALUES ($1, $2, $3, true, $4, NOW())
+           RETURNING id;`,
+          [articleId, customLabel, customDescription, safeVoterKey]
+        );
+        targetOptionId = Number(createdRes.rows[0].id);
+      }
+    }
+  }
+
+  const optionCheck = await pool.query(
+    'SELECT id FROM article_opinion_options WHERE id = $1 AND article_id = $2 LIMIT 1;',
+    [targetOptionId, articleId]
+  );
+  if (optionCheck.rowCount === 0) throw new Error('Invalid option');
+
+  await pool.query(
+    `INSERT INTO article_opinion_votes (article_id, option_id, voter_key, updated_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (article_id, voter_key)
+     DO UPDATE SET option_id = EXCLUDED.option_id, updated_at = NOW();`,
+    [articleId, targetOptionId, safeVoterKey]
+  );
+
+  return getArticleOpinion(articleId, safeVoterKey);
+};
+
+const toggleArticleOpinionLike = async (articleId, optionId, voterKey) => {
+  const safeVoterKey = String(voterKey || '').trim();
+  const safeOptionId = Number(optionId || 0);
+  if (!safeVoterKey || !safeOptionId) throw new Error('Invalid like request');
+
+  if (!pool) {
+    const option = inMemoryOpinionOptions.find((x) => x.id === safeOptionId && x.articleId === articleId);
+    if (!option) throw new Error('Invalid option');
+    const idx = inMemoryOpinionLikes.findIndex((x) => x.optionId === safeOptionId && x.voterKey === safeVoterKey);
+    let liked = false;
+    if (idx >= 0) {
+      inMemoryOpinionLikes.splice(idx, 1);
+    } else {
+      inMemoryOpinionLikes.push({
+        id: inMemoryOpinionLikeId,
+        optionId: safeOptionId,
+        voterKey: safeVoterKey,
+        createdAt: new Date().toISOString()
+      });
+      inMemoryOpinionLikeId += 1;
+      liked = true;
+    }
+    const snapshot = await getArticleOpinion(articleId, safeVoterKey);
+    return { liked, snapshot };
+  }
+
+  const optionRes = await pool.query(
+    'SELECT id FROM article_opinion_options WHERE id = $1 AND article_id = $2 LIMIT 1;',
+    [safeOptionId, articleId]
+  );
+  if (optionRes.rowCount === 0) throw new Error('Invalid option');
+
+  const existing = await pool.query(
+    'SELECT id FROM article_opinion_likes WHERE option_id = $1 AND voter_key = $2 LIMIT 1;',
+    [safeOptionId, safeVoterKey]
+  );
+  let liked = false;
+  if (existing.rowCount) {
+    await pool.query('DELETE FROM article_opinion_likes WHERE id = $1;', [existing.rows[0].id]);
+  } else {
+    await pool.query(
+      'INSERT INTO article_opinion_likes (option_id, voter_key) VALUES ($1, $2);',
+      [safeOptionId, safeVoterKey]
+    );
+    liked = true;
+  }
+
+  const snapshot = await getArticleOpinion(articleId, safeVoterKey);
+  return { liked, snapshot };
+};
+
 const createArticle = async (input) => {
   const now = new Date().toISOString();
   const slug = await ensureUniqueSlug(input.slug || input.title);
   const categories = normalizeList(input.categories);
   const tags = normalizeList(input.tags);
+  const opinionOptions = normalizeOpinionOptions(input.opinionOptions);
 
   if (!pool) {
     const article = {
@@ -554,6 +957,8 @@ const createArticle = async (input) => {
       categories,
       tags,
       featured: input.featured,
+      opinionEnabled: Boolean(input.opinionEnabled),
+      opinionQuestion: String(input.opinionQuestion || ''),
       published: input.published,
       createdAt: now,
       updatedAt: now
@@ -561,12 +966,13 @@ const createArticle = async (input) => {
 
     inMemoryArticleId += 1;
     inMemoryArticles.unshift(article);
+    await syncOpinionPresetOptions(article.id, opinionOptions);
     return article;
   }
 
   const result = await pool.query(
-    `INSERT INTO articles (title, slug, excerpt, content, cover_image_url, seo_title, seo_description, og_image_url, categories, tags, featured, published, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW()) RETURNING *;`,
+    `INSERT INTO articles (title, slug, excerpt, content, cover_image_url, seo_title, seo_description, og_image_url, categories, tags, featured, opinion_enabled, opinion_question, published, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW()) RETURNING *;`,
     [
       input.title,
       slug,
@@ -579,17 +985,21 @@ const createArticle = async (input) => {
       categories,
       tags,
       input.featured,
+      Boolean(input.opinionEnabled),
+      String(input.opinionQuestion || ''),
       input.published
     ]
   );
-
-  return mapArticleRow(result.rows[0]);
+  const article = mapArticleRow(result.rows[0]);
+  await syncOpinionPresetOptions(article.id, opinionOptions);
+  return article;
 };
 
 const updateArticle = async (id, input) => {
   const slug = await ensureUniqueSlug(input.slug || input.title, id);
   const categories = normalizeList(input.categories);
   const tags = normalizeList(input.tags);
+  const opinionOptions = normalizeOpinionOptions(input.opinionOptions);
 
   if (!pool) {
     const idx = inMemoryArticles.findIndex((a) => a.id === id);
@@ -608,11 +1018,14 @@ const updateArticle = async (id, input) => {
       categories,
       tags,
       featured: input.featured,
+      opinionEnabled: Boolean(input.opinionEnabled),
+      opinionQuestion: String(input.opinionQuestion || ''),
       published: input.published,
       updatedAt: new Date().toISOString()
     };
 
     inMemoryArticles[idx] = updated;
+    await syncOpinionPresetOptions(id, opinionOptions);
     return updated;
   }
 
@@ -629,9 +1042,11 @@ const updateArticle = async (id, input) => {
          categories = $9,
          tags = $10,
          featured = $11,
-         published = $12,
+         opinion_enabled = $12,
+         opinion_question = $13,
+         published = $14,
          updated_at = NOW()
-     WHERE id = $13
+     WHERE id = $15
      RETURNING *;`,
     [
       input.title,
@@ -645,19 +1060,27 @@ const updateArticle = async (id, input) => {
       categories,
       tags,
       input.featured,
+      Boolean(input.opinionEnabled),
+      String(input.opinionQuestion || ''),
       input.published,
       id
     ]
   );
 
   if (result.rowCount === 0) return null;
-  return mapArticleRow(result.rows[0]);
+  const article = mapArticleRow(result.rows[0]);
+  await syncOpinionPresetOptions(id, opinionOptions);
+  return article;
 };
 
 const deleteArticle = async (id) => {
   if (!pool) {
     const before = inMemoryArticles.length;
     inMemoryArticles = inMemoryArticles.filter((a) => a.id !== id);
+    inMemoryOpinionOptions = inMemoryOpinionOptions.filter((x) => x.articleId !== id);
+    inMemoryOpinionVotes = inMemoryOpinionVotes.filter((x) => x.articleId !== id);
+    const validOptionIds = new Set(inMemoryOpinionOptions.map((x) => x.id));
+    inMemoryOpinionLikes = inMemoryOpinionLikes.filter((x) => validOptionIds.has(x.optionId));
     return inMemoryArticles.length !== before;
   }
 
@@ -743,6 +1166,10 @@ module.exports = {
   getTaxonomies,
   getArticleById,
   getArticleBySlug,
+  getArticleOpinionPresetOptions,
+  getArticleOpinion,
+  submitArticleOpinionVote,
+  toggleArticleOpinionLike,
   createArticle,
   updateArticle,
   deleteArticle,

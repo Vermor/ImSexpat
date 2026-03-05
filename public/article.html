@@ -45,6 +45,23 @@
         <p id="excerpt" class="article-excerpt"></p>
         <img id="cover" class="cover-image" alt="" hidden />
         <div id="content" class="article-content"></div>
+        <section id="opinionBlock" class="opinion-block" hidden>
+          <h2 id="opinionQuestion">Votre opinion</h2>
+          <p id="opinionStatus" class="muted"></p>
+          <div id="opinionOptions" class="opinion-options"></div>
+          <form id="opinionCustomForm" class="opinion-custom-form">
+            <h3>Autre proposition</h3>
+            <label class="field">
+              <span>Choix (max 60)</span>
+              <input id="customOptionLabel" type="text" maxlength="60" required />
+            </label>
+            <label class="field">
+              <span>Opinion (max 240)</span>
+              <textarea id="customOptionDescription" rows="3" maxlength="240" required></textarea>
+            </label>
+            <button class="btn btn-primary" type="submit">Proposer et voter</button>
+          </form>
+        </section>
       </article>
     </main>
 
@@ -57,6 +74,13 @@
       const excerptEl = document.getElementById('excerpt');
       const contentEl = document.getElementById('content');
       const coverEl = document.getElementById('cover');
+      const opinionBlockEl = document.getElementById('opinionBlock');
+      const opinionQuestionEl = document.getElementById('opinionQuestion');
+      const opinionStatusEl = document.getElementById('opinionStatus');
+      const opinionOptionsEl = document.getElementById('opinionOptions');
+      const opinionCustomFormEl = document.getElementById('opinionCustomForm');
+      const customOptionLabelEl = document.getElementById('customOptionLabel');
+      const customOptionDescriptionEl = document.getElementById('customOptionDescription');
       const categoriesToggleEl = document.getElementById('categoriesToggle');
       const categoriesMenuEl = document.getElementById('categoriesMenu');
       const categoriesDropdownEl = document.getElementById('categoriesDropdown');
@@ -128,6 +152,60 @@
         }
       };
 
+      const setOpinionNotice = (message, isError = false) => {
+        if (!opinionStatusEl) return;
+        opinionStatusEl.textContent = message || '';
+        opinionStatusEl.className = isError ? 'error' : 'muted';
+      };
+
+      const renderOpinion = (snapshot) => {
+        if (!opinionBlockEl || !opinionOptionsEl || !snapshot || !snapshot.enabled) {
+          if (opinionBlockEl) opinionBlockEl.hidden = true;
+          return;
+        }
+
+        opinionBlockEl.hidden = false;
+        opinionQuestionEl.textContent = snapshot.question || 'Votre opinion';
+        const totalVotes = Number(snapshot.totalVotes || 0);
+        setOpinionNotice(totalVotes ? `${totalVotes} vote(s)` : 'Soyez le premier a voter.');
+
+        const liked = new Set(Array.isArray(snapshot.likedOptionIds) ? snapshot.likedOptionIds.map(Number) : []);
+        const selected = Number(snapshot.userVoteOptionId || 0) || 0;
+        const options = Array.isArray(snapshot.options) ? snapshot.options : [];
+        opinionOptionsEl.innerHTML = options.length ? options.map((opt) => {
+          const voteCount = Number(opt.votes || 0);
+          const pct = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
+          const isSelected = selected === Number(opt.id);
+          const isLiked = liked.has(Number(opt.id));
+          return `
+            <article class="opinion-option ${isSelected ? 'opinion-selected' : ''}">
+              <div class="opinion-option-head">
+                <strong>${escapeHtml(opt.label)}</strong>
+                <span class="muted">${voteCount} vote(s) - ${pct}%</span>
+              </div>
+              ${opt.description ? `<p class="muted">${escapeHtml(opt.description)}</p>` : ''}
+              <div class="opinion-bar"><span style="width:${pct}%;"></span></div>
+              <div class="opinion-actions">
+                <button class="btn btn-ghost" type="button" data-opinion-vote="${opt.id}">${isSelected ? 'Vote actuel' : 'Voter'}</button>
+                <button class="btn btn-ghost" type="button" data-opinion-like="${opt.id}">${isLiked ? 'Unlike' : 'Like'} (${Number(opt.likes || 0)})</button>
+              </div>
+            </article>
+          `;
+        }).join('') : '<p class="muted">Aucun choix disponible.</p>';
+      };
+
+      const loadOpinion = async () => {
+        if (!slug) return;
+        try {
+          const response = await fetch(`/api/articles/${encodeURIComponent(slug)}/opinion`, { cache: 'no-store' });
+          if (!response.ok) return;
+          const snapshot = await response.json();
+          renderOpinion(snapshot);
+        } catch (_error) {
+          if (opinionBlockEl) opinionBlockEl.hidden = true;
+        }
+      };
+
       const normalizeTitleText = (value) => String(value || '')
         .toLowerCase()
         .replace(/[“”"']/g, '')
@@ -183,6 +261,7 @@
           }
 
           contentEl.innerHTML = contentHtml;
+          loadOpinion().catch(() => {});
         })
         .catch(() => {
           titleEl.textContent = 'Article introuvable';
@@ -191,6 +270,68 @@
           excerptEl.textContent = '';
           contentEl.innerHTML = '<p>Ce contenu nest pas disponible.</p>';
         });
+
+      if (opinionOptionsEl) {
+        opinionOptionsEl.addEventListener('click', async (event) => {
+          const voteId = Number(event.target.getAttribute('data-opinion-vote') || 0);
+          const likeId = Number(event.target.getAttribute('data-opinion-like') || 0);
+          if (!voteId && !likeId) return;
+
+          try {
+            if (voteId) {
+              const response = await fetch(`/api/articles/${encodeURIComponent(slug)}/opinion/vote`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ optionId: voteId })
+              });
+              const payload = await response.json();
+              if (!response.ok) throw new Error(payload.error || 'Vote impossible');
+              renderOpinion(payload.snapshot);
+              setOpinionNotice('Vote enregistre.');
+              return;
+            }
+
+            const response = await fetch(`/api/articles/${encodeURIComponent(slug)}/opinion/like`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ optionId: likeId })
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.error || 'Like impossible');
+            renderOpinion(payload.snapshot);
+            setOpinionNotice(payload.liked ? 'Like ajoute.' : 'Like retire.');
+          } catch (error) {
+            setOpinionNotice(error.message || 'Erreur', true);
+          }
+        });
+      }
+
+      if (opinionCustomFormEl) {
+        opinionCustomFormEl.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const customLabel = String(customOptionLabelEl.value || '').trim();
+          const customDescription = String(customOptionDescriptionEl.value || '').trim();
+          if (!customLabel || !customDescription) {
+            setOpinionNotice('Choix et opinion sont obligatoires.', true);
+            return;
+          }
+          try {
+            const response = await fetch(`/api/articles/${encodeURIComponent(slug)}/opinion/vote`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ customLabel, customDescription })
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.error || 'Envoi impossible');
+            renderOpinion(payload.snapshot);
+            customOptionLabelEl.value = '';
+            customOptionDescriptionEl.value = '';
+            setOpinionNotice('Opinion enregistree.');
+          } catch (error) {
+            setOpinionNotice(error.message || 'Erreur', true);
+          }
+        });
+      }
 
       if (categoriesToggleEl && categoriesDropdownEl) {
         categoriesToggleEl.addEventListener('click', (event) => {
