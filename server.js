@@ -107,15 +107,6 @@ const deleteUploadFile = async (id) => {
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(cookieParser(process.env.COOKIE_SECRET || 'local-dev-secret'));
-app.use((req, res, next) => {
-  // Keep the site non-indexed by default, but allow Facebook crawlers to scrape previews.
-  const ua = String(req.headers['user-agent'] || '').toLowerCase();
-  const isFacebookCrawler = ua.includes('facebookexternalhit') || ua.includes('facebot');
-  if (!isFacebookCrawler) {
-    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet');
-  }
-  next();
-});
 
 app.get('/health', (req, res) => {
   res.status(200).send('ok');
