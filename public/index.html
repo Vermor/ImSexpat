@@ -198,26 +198,28 @@
 
         if (!article.coverImageUrl) {
           heroEl.innerHTML = `
-            <a class="featured-hero-link featured-hero-link-no-image" href="${href}">
+            <div class="featured-hero-link featured-hero-link-no-image">
               <div class="featured-hero-overlay">
                 ${renderCategoryLine(article)}
-                <h1>${title}</h1>
+                <h1><a class="featured-hero-title-link" href="${href}">${title}</a></h1>
                 ${excerpt}
               </div>
-            </a>
+            </div>
           `;
           return;
         }
 
         heroEl.innerHTML = `
-          <a class="featured-hero-link" href="${href}">
-            <img class="featured-hero-image" src="${article.coverImageUrl}" alt="${title}" loading="eager" />
+          <div class="featured-hero-link">
+            <a class="featured-hero-image-link" href="${href}">
+              <img class="featured-hero-image" src="${article.coverImageUrl}" alt="${title}" loading="eager" />
+            </a>
             <div class="featured-hero-overlay">
               ${renderCategoryLine(article)}
-              <h1>${title}</h1>
+              <h1><a class="featured-hero-title-link" href="${href}">${title}</a></h1>
               ${excerpt}
             </div>
-          </a>
+          </div>
         `;
       };
 
