@@ -115,14 +115,27 @@
           return;
         }
 
-        listEl.innerHTML = articles.map((article) => `
-          <article class="list-item vertical-item">
-            <div>
-              <h2><a href="/article/${encodeURIComponent(article.slug)}">${escapeHtml(article.title)}</a></h2>
-              <p class="muted">${escapeHtml(article.excerpt || '')}</p>
-            </div>
-          </article>
-        `).join('');
+        listEl.innerHTML = `
+          <div class="article-card-grid">
+            ${articles.map((article) => `
+              <article class="article-card">
+                ${article.coverImageUrl ? `<a href="/article/${encodeURIComponent(article.slug)}"><img class="article-card-cover" src="${article.coverImageUrl}" alt="${escapeHtml(article.title)}" loading="lazy" /></a>` : ''}
+                <div class="article-card-body">
+                  <h2><a href="/article/${encodeURIComponent(article.slug)}">${escapeHtml(article.title)}</a></h2>
+                  ${Array.isArray(article.categories) && article.categories.length ? `
+                    <p class="article-meta">
+                      <span class="meta-group">
+                        <strong>Categories:</strong>
+                        ${(article.categories || []).map((c) => `<span class="chip">${escapeHtml(c)}</span>`).join('')}
+                      </span>
+                    </p>
+                  ` : ''}
+                  <p class="article-excerpt">${escapeHtml(article.excerpt || '')}</p>
+                </div>
+              </article>
+            `).join('')}
+          </div>
+        `;
 
         const prevDisabled = pagination.page <= 1 ? 'disabled' : '';
         const nextDisabled = pagination.page >= pagination.totalPages ? 'disabled' : '';

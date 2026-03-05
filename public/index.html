@@ -38,7 +38,7 @@
       </section>
 
       <section class="admin-panel article-list-panel latest-article-section">
-        <h2>Dernier article publie</h2>
+        <h2>Derniers articles publies</h2>
         <div id="latestArticle">
           <p class="muted">Chargement...</p>
         </div>
@@ -123,61 +123,50 @@
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
 
-      const renderMetaLine = (article) => {
+      const renderCategoryLine = (article) => {
         const categories = Array.isArray(article.categories) ? article.categories.filter(Boolean) : [];
-        const tags = Array.isArray(article.tags) ? article.tags.filter(Boolean) : [];
-        const groups = [];
-
-        if (categories.length) {
-          groups.push(`
+        if (!categories.length) return '';
+        return `
+          <p class="article-meta">
             <span class="meta-group">
               <strong>Categories:</strong>
               ${categories.map((x) => `<span class="chip">${escapeHtml(x)}</span>`).join('')}
             </span>
-          `);
-        }
-
-        if (tags.length) {
-          groups.push(`
-            <span class="meta-group">
-              <strong>Tags:</strong>
-              ${tags.map((x) => `<span class="chip">${escapeHtml(x)}</span>`).join('')}
-            </span>
-          `);
-        }
-
-        if (!groups.length) return '';
-        return `<p class="article-meta">${groups.join('')}</p>`;
+          </p>
+        `;
       };
 
-      const renderLatestArticle = (article) => {
+      const renderLatestArticles = (articles) => {
         const container = document.getElementById('latestArticle');
         if (!container) return;
 
-        if (!article) {
+        if (!Array.isArray(articles) || !articles.length) {
           container.innerHTML = '<p class="muted">Aucun article publie pour le moment.</p>';
           return;
         }
 
         container.innerHTML = `
-          <article class="list-item vertical-item">
-            <h3><a href="/article/${encodeURIComponent(article.slug)}">${escapeHtml(article.title)}</a></h3>
-            ${renderMetaLine(article)}
-            ${article.excerpt ? `<p class="article-excerpt">${escapeHtml(article.excerpt)}</p>` : ''}
-            ${article.coverImageUrl ? `<img class="cover-image" src="${article.coverImageUrl}" alt="${escapeHtml(article.title)}" />` : ''}
-            <div class="article-content">${article.content || ''}</div>
-            <p><a class="btn btn-ghost" href="/article/${encodeURIComponent(article.slug)}">Lire la page article</a></p>
-          </article>
+          <div class="article-card-grid">
+            ${articles.map((article) => `
+              <article class="article-card">
+                ${article.coverImageUrl ? `<a href="/article/${encodeURIComponent(article.slug)}"><img class="article-card-cover" src="${article.coverImageUrl}" alt="${escapeHtml(article.title)}" loading="lazy" /></a>` : ''}
+                <div class="article-card-body">
+                  <h3><a href="/article/${encodeURIComponent(article.slug)}">${escapeHtml(article.title)}</a></h3>
+                  ${renderCategoryLine(article)}
+                  ${article.excerpt ? `<p class="article-excerpt">${escapeHtml(article.excerpt)}</p>` : ''}
+                </div>
+              </article>
+            `).join('')}
+          </div>
         `;
       };
 
       const loadLatestArticle = async () => {
         try {
-          const response = await fetch('/api/articles?page=1&pageSize=1', { cache: 'no-store' });
+          const response = await fetch('/api/articles?page=1&pageSize=3', { cache: 'no-store' });
           if (!response.ok) throw new Error('Failed to load articles');
           const payload = await response.json();
-          const latest = (payload.items || [])[0] || null;
-          renderLatestArticle(latest);
+          renderLatestArticles(payload.items || []);
           renderCategoryMenu((payload.taxonomies || {}).categories || []);
         } catch (error) {
           const container = document.getElementById('latestArticle');
