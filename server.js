@@ -474,6 +474,14 @@ app.post('/api/articles/:slug/opinion/vote', opinionRateLimit, async (req, res) 
     if (message.includes('disabled')) return res.status(400).json({ error: 'Fonction opinion non active pour cet article' });
     if (message.includes('Invalid option')) return res.status(400).json({ error: 'Choix invalide' });
     if (message.includes('Custom option already exists')) return res.status(409).json({ error: 'Tu as deja propose un choix pour cet article.' });
+    if (message.toLowerCase().includes('vote change cooldown')) {
+      return res.status(429).json({ error: 'Action temporairement bloquee. Reessaie dans quelques minutes.' });
+    }
+    if (error && error.code === 'VOTE_CHANGE_COOLDOWN') {
+      const waitMs = Number(error.waitMs || 0);
+      const waitMinutes = Math.max(1, Math.ceil(waitMs / 60000));
+      return res.status(429).json({ error: `Action temporairement bloquee. Reessaie dans ${waitMinutes} minute(s).` });
+    }
     console.error('Failed to submit vote:', error);
     return res.status(500).json({ error: 'Erreur lors de lenregistrement du vote' });
   }

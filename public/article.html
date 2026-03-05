@@ -344,7 +344,8 @@
 
       if (opinionOptionsEl) {
         opinionOptionsEl.addEventListener('click', async (event) => {
-          const voteId = Number(event.target.getAttribute('data-opinion-vote') || 0);
+          const button = event.target.closest('[data-opinion-vote]');
+          const voteId = Number((button && button.getAttribute('data-opinion-vote')) || 0);
           if (!voteId) return;
 
           try {
@@ -353,7 +354,7 @@
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ optionId: voteId })
             });
-            const payload = await response.json();
+            const payload = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(payload.error || 'Vote impossible');
             renderOpinion(payload.snapshot);
             const selectedOption = Array.isArray(payload.snapshot && payload.snapshot.options)
@@ -386,7 +387,7 @@
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ customLabel, customDescription })
             });
-            const payload = await response.json();
+            const payload = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(payload.error || 'Envoi impossible');
             renderOpinion(payload.snapshot);
             customOptionLabelEl.value = '';
@@ -416,7 +417,7 @@
                 explanation: String(voteExplanationInputEl.value || '').trim()
               })
             });
-            const payload = await response.json();
+            const payload = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(payload.error || 'Impossible denregistrer lexplication');
             explanationClosedForOptionId = currentVotedOptionId;
             renderOpinion(payload.snapshot);
