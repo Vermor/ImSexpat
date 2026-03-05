@@ -396,6 +396,24 @@ textarea {
   margin: 0 0 0.65rem;
 }
 
+.rubrics-layout {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.rubric-block {
+  margin-bottom: 0;
+}
+
+.rubric-block-single {
+  grid-column: span 1;
+}
+
+.rubric-block-multi {
+  grid-column: 1 / -1;
+}
+
 .rubric-card-grid {
   grid-template-columns: repeat(var(--rubric-cols, 3), minmax(0, 1fr));
 }
@@ -692,6 +710,7 @@ textarea {
   }
 
   .grid,
+  .rubrics-layout,
   .article-card-grid,
   .admin-grid,
   .field-row,

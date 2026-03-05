@@ -184,8 +184,9 @@
       const renderRubricBlock = (title, articles) => {
         const safeArticles = Array.isArray(articles) ? articles : [];
         const cols = Math.max(1, Math.min(3, safeArticles.length || 1));
+        const sizeClass = safeArticles.length > 1 ? 'rubric-block-multi' : 'rubric-block-single';
         return `
-          <section class="rubric-block">
+          <section class="rubric-block ${sizeClass}">
             <h3>${escapeHtml(title)}</h3>
             <div class="article-card-grid rubric-card-grid" style="--rubric-cols:${cols};">
               ${safeArticles.length ? safeArticles.map((article) => `
@@ -234,7 +235,7 @@
 
         const html = blocks.filter(Boolean).join('');
         rubricsSectionEl.hidden = false;
-        rubricsBlocksEl.innerHTML = html;
+        rubricsBlocksEl.innerHTML = `<div class="rubrics-layout">${html}</div>`;
       };
 
       const loadLatestArticle = async () => {
