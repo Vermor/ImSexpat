@@ -38,6 +38,11 @@
         <p class="subtitle" id="heroSubtitle">Articles, chroniques et ressources en cours de construction.</p>
       </section>
 
+      <section id="rubricsSection" class="admin-panel article-list-panel latest-article-section" hidden>
+        <h2>Rubriques</h2>
+        <div id="rubricsBlocks"></div>
+      </section>
+
       <section class="admin-panel article-list-panel latest-article-section">
         <h2>Derniers articles publies</h2>
         <div id="latestArticle">
@@ -68,6 +73,9 @@
       const categoriesToggleEl = document.getElementById('categoriesToggle');
       const categoriesMenuEl = document.getElementById('categoriesMenu');
       const categoriesDropdownEl = document.getElementById('categoriesDropdown');
+      const rubricsSectionEl = document.getElementById('rubricsSection');
+      const rubricsBlocksEl = document.getElementById('rubricsBlocks');
+      let landingRubrics = [];
 
       const closeCategoriesMenu = () => {
         if (!categoriesMenuEl || !categoriesToggleEl) return;
@@ -104,6 +112,7 @@
         setText('heroTitle', content.heroTitle);
         setText('heroSubtitle', content.heroSubtitle);
         setText('footerText', content.footerText || content.siteName);
+        landingRubrics = Array.isArray(content.rubrics) ? content.rubrics : [];
       };
 
       const loadLandingContent = async () => {
@@ -172,6 +181,65 @@
         `;
       };
 
+      const renderRubricBlock = (title, articles) => {
+        if (!Array.isArray(articles) || !articles.length) return '';
+        return `
+          <section class="rubric-block">
+            <h3>${escapeHtml(title)}</h3>
+            <div class="article-card-grid">
+              ${articles.map((article) => `
+                <article class="article-card">
+                  ${article.coverImageUrl ? `<a href="/article/${encodeURIComponent(article.slug)}"><img class="article-card-cover" src="${article.coverImageUrl}" alt="${escapeHtml(article.title)}" loading="lazy" /></a>` : ''}
+                  <div class="article-card-body">
+                    ${renderCategoryLine(article)}
+                    <h3><a href="/article/${encodeURIComponent(article.slug)}">${escapeHtml(article.title)}</a></h3>
+                    ${article.excerpt ? `<p class="article-excerpt">${escapeHtml(article.excerpt)}</p>` : ''}
+                  </div>
+                </article>
+              `).join('')}
+            </div>
+          </section>
+        `;
+      };
+
+      const loadRubrics = async () => {
+        if (!rubricsSectionEl || !rubricsBlocksEl) return;
+        const safeRubrics = Array.isArray(landingRubrics) ? landingRubrics : [];
+        if (!safeRubrics.length) {
+          rubricsSectionEl.hidden = true;
+          rubricsBlocksEl.innerHTML = '';
+          return;
+        }
+
+        rubricsSectionEl.hidden = false;
+        rubricsBlocksEl.innerHTML = '<p class="muted">Chargement des rubriques...</p>';
+
+        const blocks = await Promise.all(safeRubrics.map(async (rubric) => {
+          const categories = Array.isArray(rubric.categories) ? rubric.categories.filter(Boolean) : [];
+          const limit = Math.max(1, Math.min(12, Number(rubric.limit) || 3));
+          const title = String(rubric.title || '').trim();
+          if (!title || !categories.length) return '';
+
+          const params = new URLSearchParams({
+            page: '1',
+            pageSize: String(limit),
+            categories: categories.join(',')
+          });
+          const response = await fetch(`/api/articles?${params.toString()}`, { cache: 'no-store' });
+          if (!response.ok) return '';
+          const payload = await response.json();
+          return renderRubricBlock(title, payload.items || []);
+        }));
+
+        const html = blocks.filter(Boolean).join('');
+        if (!html) {
+          rubricsSectionEl.hidden = true;
+          rubricsBlocksEl.innerHTML = '';
+          return;
+        }
+        rubricsBlocksEl.innerHTML = html;
+      };
+
       const loadLatestArticle = async () => {
         try {
           const response = await fetch('/api/articles?page=1&pageSize=3', { cache: 'no-store' });
@@ -215,7 +283,9 @@
           closeCategoriesMenu();
         });
       }
-      loadLandingContent();
+      loadLandingContent().then(() => loadRubrics().catch(() => {
+        if (rubricsSectionEl) rubricsSectionEl.hidden = true;
+      }));
       loadLatestArticle();
     </script>
   </body>

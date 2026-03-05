@@ -14,7 +14,8 @@ const DEFAULT_LANDING_CONTENT = {
   card2Text: 'Transports, sante, courses, quartiers et habitudes culturelles a connaitre.',
   card3Title: 'Week-ends & iles',
   card3Text: 'Itineraires realistes depuis les grandes villes vers les meilleures escapades.',
-  footerText: 'Vermor Club'
+  footerText: 'Vermor Club',
+  rubrics: []
 };
 
 let pool = null;
@@ -63,7 +64,15 @@ const mapLandingRow = (row) => ({
   card2Text: row.card2_text,
   card3Title: row.card3_title,
   card3Text: row.card3_text,
-  footerText: row.footer_text
+  footerText: row.footer_text,
+  rubrics: (() => {
+    try {
+      const parsed = JSON.parse(String(row.rubrics_json || '[]'));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_error) {
+      return [];
+    }
+  })()
 });
 
 const mapArticleRow = (row) => ({
@@ -110,6 +119,7 @@ const landingTableSql = `
     card3_title TEXT NOT NULL,
     card3_text TEXT NOT NULL,
     footer_text TEXT NOT NULL,
+    rubrics_json TEXT NOT NULL DEFAULT '[]',
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
 `;
@@ -162,6 +172,7 @@ const upsertLandingSql = `
     card3_title,
     card3_text,
     footer_text,
+    rubrics_json,
     updated_at
   ) VALUES (
     1,
@@ -179,6 +190,7 @@ const upsertLandingSql = `
     $12,
     $13,
     $14,
+    $15,
     NOW()
   )
   ON CONFLICT (id)
@@ -197,6 +209,7 @@ const upsertLandingSql = `
     card3_title = EXCLUDED.card3_title,
     card3_text = EXCLUDED.card3_text,
     footer_text = EXCLUDED.footer_text,
+    rubrics_json = EXCLUDED.rubrics_json,
     updated_at = NOW();
 `;
 
@@ -214,7 +227,8 @@ const landingValues = (content) => ([
   content.card2Text,
   content.card3Title,
   content.card3Text,
-  content.footerText
+  content.footerText,
+  JSON.stringify(Array.isArray(content.rubrics) ? content.rubrics : [])
 ]);
 
 const slugify = (value) => String(value || '')
@@ -254,6 +268,7 @@ const initStorage = async () => {
   await pool.query(landingTableSql);
   await pool.query(articlesTableSql);
   await pool.query(logsTableSql);
+  await pool.query("ALTER TABLE landing_content ADD COLUMN IF NOT EXISTS rubrics_json TEXT NOT NULL DEFAULT '[]';");
   await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS seo_title TEXT NOT NULL DEFAULT '';");
   await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS seo_description TEXT NOT NULL DEFAULT '';");
   await pool.query("ALTER TABLE articles ADD COLUMN IF NOT EXISTS og_image_url TEXT NOT NULL DEFAULT '';");
@@ -346,13 +361,18 @@ const listArticles = async (options = {}) => {
   const pageSize = Math.min(50, Math.max(1, Number(options.pageSize || 9)));
   const q = String(options.q || '').trim();
   const category = String(options.category || '').trim();
+  const categories = normalizeList(options.categories).slice(0, 12);
   const tag = String(options.tag || '').trim();
   const publishedOnly = Boolean(options.publishedOnly);
 
   if (!pool) {
     let items = [...inMemoryArticles];
     if (publishedOnly) items = items.filter((a) => a.published);
-    if (category) items = items.filter((a) => (a.categories || []).includes(category));
+    if (categories.length) {
+      items = items.filter((a) => (a.categories || []).some((c) => categories.includes(c)));
+    } else if (category) {
+      items = items.filter((a) => (a.categories || []).includes(category));
+    }
     if (tag) items = items.filter((a) => (a.tags || []).includes(tag));
     if (q) {
       const needle = q.toLowerCase();
@@ -374,7 +394,10 @@ const listArticles = async (options = {}) => {
     values.push(true);
     where.push(`published = $${values.length}`);
   }
-  if (category) {
+  if (categories.length) {
+    values.push(categories);
+    where.push(`categories && $${values.length}::text[]`);
+  } else if (category) {
     values.push(category);
     where.push(`$${values.length} = ANY(categories)`);
   }

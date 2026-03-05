@@ -376,6 +376,14 @@ textarea {
   width: 100%;
 }
 
+.rubric-block {
+  margin-bottom: 1.05rem;
+}
+
+.rubric-block h3 {
+  margin: 0 0 0.65rem;
+}
+
 .article-card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

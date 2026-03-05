@@ -189,6 +189,32 @@ const toCommaList = (value, maxLength = 400) => {
   return sanitizeText(value, maxLength);
 };
 
+const normalizeRubricsPayload = (value) => {
+  let input = value;
+  if (typeof input === 'string') {
+    try {
+      input = JSON.parse(input);
+    } catch (_error) {
+      input = [];
+    }
+  }
+  if (!Array.isArray(input)) return [];
+
+  return input
+    .map((item) => ({
+      title: sanitizeText(item && item.title, 80),
+      categories: toCommaList(item && item.categories, 400)
+        .split(',')
+        .map((x) => x.trim())
+        .filter(Boolean)
+        .filter((x, i, arr) => arr.indexOf(x) === i)
+        .slice(0, 8),
+      limit: Math.max(1, Math.min(12, Number(item && item.limit) || 3))
+    }))
+    .filter((item) => item.title && item.categories.length)
+    .slice(0, 8);
+};
+
 const normalizeLandingPayload = (payload) => ({
   siteName: sanitizeText(payload.siteName, 100) || DEFAULT_LANDING_CONTENT.siteName,
   pageTitle: sanitizeText(payload.pageTitle, 180) || DEFAULT_LANDING_CONTENT.pageTitle,
@@ -203,7 +229,8 @@ const normalizeLandingPayload = (payload) => ({
   card2Text: sanitizeText(payload.card2Text, 500) || DEFAULT_LANDING_CONTENT.card2Text,
   card3Title: sanitizeText(payload.card3Title, 120) || DEFAULT_LANDING_CONTENT.card3Title,
   card3Text: sanitizeText(payload.card3Text, 500) || DEFAULT_LANDING_CONTENT.card3Text,
-  footerText: sanitizeText(payload.footerText, 120) || DEFAULT_LANDING_CONTENT.footerText
+  footerText: sanitizeText(payload.footerText, 120) || DEFAULT_LANDING_CONTENT.footerText,
+  rubrics: normalizeRubricsPayload(payload.rubrics)
 });
 
 const normalizeArticlePayload = (payload, uploadedCoverUrl, currentCover = '') => {
@@ -317,6 +344,7 @@ app.get('/api/articles', async (req, res) => {
       pageSize: req.query.pageSize,
       q: req.query.q,
       category: req.query.category,
+      categories: req.query.categories,
       tag: req.query.tag,
       publishedOnly: true
     });

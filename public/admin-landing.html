@@ -52,6 +52,16 @@
             <input name="footerText" type="text" required />
           </label>
 
+          <div class="field">
+            <span>Rubriques de la landing</span>
+            <p class="hint">Chaque rubrique: titre, categories (virgules), nombre d'articles.</p>
+            <div id="rubricsEditor" class="admin-list"></div>
+            <div class="editor-toolbar-row">
+              <button id="addRubricBtn" class="btn btn-ghost" type="button">Ajouter une rubrique</button>
+            </div>
+            <input name="rubrics" id="rubricsInput" type="hidden" />
+          </div>
+
           <div class="editor-actions">
             <a href="/admin" class="btn btn-ghost">Retour admin</a>
             <button class="btn btn-primary" type="submit">Enregistrer</button>
@@ -63,12 +73,67 @@
     <script>
       const form = document.getElementById('landingForm');
       const statusEl = document.getElementById('saveStatus');
+      const rubricsEditor = document.getElementById('rubricsEditor');
+      const addRubricBtn = document.getElementById('addRubricBtn');
+      const rubricsInput = document.getElementById('rubricsInput');
+      let rubricsState = [];
 
       const fillForm = (data) => {
         Object.keys(data).forEach((key) => {
           if (!form.elements[key]) return;
+          if (key === 'rubrics') return;
           form.elements[key].value = data[key] || '';
         });
+        rubricsState = Array.isArray(data.rubrics) ? data.rubrics.map((x) => ({
+          title: String(x.title || ''),
+          categories: Array.isArray(x.categories) ? x.categories.join(', ') : String(x.categories || ''),
+          limit: Math.max(1, Math.min(12, Number(x.limit) || 3))
+        })) : [];
+        renderRubrics();
+      };
+
+      const syncRubricsInput = () => {
+        const payload = rubricsState.map((item) => ({
+          title: String(item.title || '').trim(),
+          categories: String(item.categories || '')
+            .split(',')
+            .map((x) => x.trim())
+            .filter(Boolean)
+            .filter((x, i, arr) => arr.indexOf(x) === i),
+          limit: Math.max(1, Math.min(12, Number(item.limit) || 3))
+        })).filter((item) => item.title && item.categories.length);
+        rubricsInput.value = JSON.stringify(payload);
+      };
+
+      const renderRubrics = () => {
+        if (!rubricsState.length) {
+          rubricsEditor.innerHTML = '<p class="muted">Aucune rubrique configuree.</p>';
+          syncRubricsInput();
+          return;
+        }
+
+        rubricsEditor.innerHTML = rubricsState.map((item, idx) => `
+          <article class="list-item vertical-item">
+            <div class="field-row">
+              <label class="field">
+                <span>Titre</span>
+                <input type="text" data-rubric-title="${idx}" value="${String(item.title || '').replaceAll('"', '&quot;')}" />
+              </label>
+              <label class="field">
+                <span>Nombre d'articles</span>
+                <input type="number" min="1" max="12" data-rubric-limit="${idx}" value="${Math.max(1, Math.min(12, Number(item.limit) || 3))}" />
+              </label>
+            </div>
+            <label class="field">
+              <span>Categories (virgules)</span>
+              <input type="text" data-rubric-categories="${idx}" value="${String(item.categories || '').replaceAll('"', '&quot;')}" />
+            </label>
+            <div class="list-actions">
+              <button class="btn btn-ghost" type="button" data-rubric-delete="${idx}">Supprimer</button>
+            </div>
+          </article>
+        `).join('');
+        syncRubricsInput();
       };
 
       const loadData = async () => {
@@ -83,6 +148,7 @@
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
 
+        syncRubricsInput();
         const payload = Object.fromEntries(new FormData(form).entries());
         const response = await fetch('/api/admin/landing', {
           method: 'POST',
@@ -99,6 +165,28 @@
         setTimeout(() => {
           statusEl.hidden = true;
         }, 1800);
+      });
+
+      addRubricBtn.addEventListener('click', () => {
+        rubricsState.push({ title: '', categories: '', limit: 3 });
+        renderRubrics();
+      });
+
+      rubricsEditor.addEventListener('input', (event) => {
+        const titleIdx = event.target.getAttribute('data-rubric-title');
+        const categoriesIdx = event.target.getAttribute('data-rubric-categories');
+        const limitIdx = event.target.getAttribute('data-rubric-limit');
+        if (titleIdx !== null) rubricsState[Number(titleIdx)].title = event.target.value;
+        if (categoriesIdx !== null) rubricsState[Number(categoriesIdx)].categories = event.target.value;
+        if (limitIdx !== null) rubricsState[Number(limitIdx)].limit = event.target.value;
+        syncRubricsInput();
+      });
+
+      rubricsEditor.addEventListener('click', (event) => {
+        const delIdx = event.target.getAttribute('data-rubric-delete');
+        if (delIdx === null) return;
+        rubricsState.splice(Number(delIdx), 1);
+        renderRubrics();
       });
 
       loadData().catch((error) => {
