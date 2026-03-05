@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
@@ -28,7 +28,7 @@ const {
 const app = express();
 const port = process.env.PORT || 3000;
 const isProd = process.env.NODE_ENV === 'production';
-const primaryDomain = process.env.PRIMARY_DOMAIN || 'imsexpat.site';
+const primaryDomain = process.env.PRIMARY_DOMAIN || 'vermor.club';
 
 const uploadsDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -267,7 +267,7 @@ app.get('/article/:slug', async (req, res) => {
       return res.status(404).type('html').send(html);
     }
 
-    const title = article.seoTitle || article.title || 'Article | ImSexpat';
+    const title = article.seoTitle || article.title || 'Article | Vermor Club';
     const description = article.seoDescription || article.excerpt || '';
     const imageUrl = toAbsoluteUrl(article.ogImageUrl || article.coverImageUrl || '', req);
     const pageUrl = toAbsoluteUrl(req.originalUrl || req.path || '/', req);
@@ -614,7 +614,7 @@ const start = async () => {
     await initStorage();
     console.log('Media storage: local filesystem');
     app.listen(port, () => {
-      console.log(`ImSexpat app running on http://localhost:${port}`);
+      console.log(`Vermor Club app running on http://localhost:${port}`);
     });
   } catch (error) {
     console.error('Startup failed:', error);

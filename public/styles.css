@@ -1,12 +1,12 @@
-﻿:root {
-  --bg: #f5efe4;
-  --paper: #fffaf2;
-  --ink: #1e1e1e;
-  --muted: #515151;
-  --accent: #00796b;
-  --accent-dark: #005d52;
-  --sand: #e5d2b8;
-  --line: #d8c4a9;
+:root {
+  --bg: #edf3f8;
+  --paper: #ffffff;
+  --ink: #172033;
+  --muted: #5b6678;
+  --accent: #b04f2d;
+  --accent-dark: #8c3f24;
+  --sand: #d9e2ee;
+  --line: #cfd9e6;
   --danger: #b10020;
   --ok: #0f7b3d;
 }
@@ -17,11 +17,11 @@
 
 body {
   margin: 0;
-  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  font-family: "Segoe UI", "Trebuchet MS", sans-serif;
   color: var(--ink);
   background:
-    radial-gradient(circle at 20% 20%, #ffe3ad 0, transparent 34%),
-    radial-gradient(circle at 80% 0, #b4d8d2 0, transparent 30%),
+    radial-gradient(circle at 16% 18%, #ffe8d6 0, transparent 36%),
+    radial-gradient(circle at 84% 2%, #dae9ff 0, transparent 34%),
     var(--bg);
   min-height: 100vh;
 }
@@ -63,7 +63,7 @@ body {
 }
 
 .nav-link:hover {
-  background: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .nav-dropdown {
@@ -102,7 +102,7 @@ body {
 }
 
 .dropdown-item:hover {
-  background: #f8efe1;
+  background: #f1f5fb;
 }
 
 main {
@@ -112,11 +112,11 @@ main {
 }
 
 .hero {
-  background: linear-gradient(155deg, rgba(255, 255, 255, 0.75), rgba(255, 240, 209, 0.8));
+  background: linear-gradient(148deg, rgba(255, 255, 255, 0.9), rgba(237, 244, 255, 0.92));
   border: 1px solid var(--line);
   border-radius: 24px;
   padding: 2.3rem;
-  box-shadow: 0 16px 40px rgba(66, 44, 14, 0.09);
+  box-shadow: 0 16px 40px rgba(30, 48, 79, 0.1);
   animation: rise 0.8s ease-out;
 }
 

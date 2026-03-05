@@ -1,11 +1,11 @@
-﻿const { Pool } = require('pg');
+const { Pool } = require('pg');
 
 const DEFAULT_LANDING_CONTENT = {
-  siteName: 'ImSexpat',
-  pageTitle: "ImSexpat | Journal d'un sexpat",
-  metaDescription: "recit, informations, news sur la vie d'un sexpat",
-  heroTitle: "Journal d'un sexpat",
-  heroSubtitle: "recit, informations, news sur la vie d'un sexpat",
+  siteName: 'Vermor Club',
+  pageTitle: 'Vermor Club | Articles et chroniques',
+  metaDescription: 'Vermor Club: articles, chroniques et ressources.',
+  heroTitle: 'Vermor Club',
+  heroSubtitle: 'Articles, chroniques et ressources en cours de construction.',
   ctaText: 'Voir les themes',
   ctaHref: '/articles',
   card1Title: 'Installation expat',
@@ -14,7 +14,7 @@ const DEFAULT_LANDING_CONTENT = {
   card2Text: 'Transports, sante, courses, quartiers et habitudes culturelles a connaitre.',
   card3Title: 'Week-ends & iles',
   card3Text: 'Itineraires realistes depuis les grandes villes vers les meilleures escapades.',
-  footerText: 'ImSexpat'
+  footerText: 'Vermor Club'
 };
 
 let pool = null;
