@@ -414,9 +414,24 @@ const getTaxonomies = async () => {
 
   const result = await pool.query(`
     SELECT
-      ARRAY(SELECT DISTINCT unnest(categories) ORDER BY 1) AS categories,
-      ARRAY(SELECT DISTINCT unnest(tags) ORDER BY 1) AS tags
-    FROM articles;
+      ARRAY(
+        SELECT DISTINCT c
+        FROM (
+          SELECT unnest(categories) AS c
+          FROM articles
+        ) AS cats
+        WHERE c IS NOT NULL AND c <> ''
+        ORDER BY 1
+      ) AS categories,
+      ARRAY(
+        SELECT DISTINCT t
+        FROM (
+          SELECT unnest(tags) AS t
+          FROM articles
+        ) AS tags_list
+        WHERE t IS NOT NULL AND t <> ''
+        ORDER BY 1
+      ) AS tags;
   `);
 
   const row = result.rows[0] || {};
