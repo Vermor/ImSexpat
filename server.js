@@ -19,6 +19,8 @@ const {
   getArticleOpinionPresetOptions,
   getArticleOpinion,
   submitArticleOpinionVote,
+  listArticleOpinionOptionsAdmin,
+  deleteArticleOpinionOptionAdmin,
   createArticle,
   updateArticle,
   deleteArticle,
@@ -471,6 +473,7 @@ app.post('/api/articles/:slug/opinion/vote', opinionRateLimit, async (req, res) 
     const message = String(error && error.message || '');
     if (message.includes('disabled')) return res.status(400).json({ error: 'Fonction opinion non active pour cet article' });
     if (message.includes('Invalid option')) return res.status(400).json({ error: 'Choix invalide' });
+    if (message.includes('Custom option already exists')) return res.status(409).json({ error: 'Tu as deja propose un choix pour cet article.' });
     console.error('Failed to submit vote:', error);
     return res.status(500).json({ error: 'Erreur lors de lenregistrement du vote' });
   }
@@ -601,6 +604,43 @@ app.get('/api/admin/articles/:id', protectAdmin, async (req, res) => {
   } catch (error) {
     console.error('Failed to load admin article:', error);
     res.status(500).json({ error: 'Failed to load admin article' });
+  }
+});
+
+app.get('/api/admin/articles/:id/opinion-options', protectAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid article id' });
+    const article = await getArticleById(id);
+    if (!article) return res.status(404).json({ error: 'Article not found' });
+    const options = await listArticleOpinionOptionsAdmin(id);
+    return res.json({ items: options });
+  } catch (error) {
+    console.error('Failed to load admin opinion options:', error);
+    return res.status(500).json({ error: 'Failed to load opinion options' });
+  }
+});
+
+app.delete('/api/admin/articles/:id/opinion-options/:optionId', protectAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const optionId = Number(req.params.optionId);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid article id' });
+    if (!Number.isInteger(optionId) || optionId <= 0) return res.status(400).json({ error: 'Invalid option id' });
+    const ok = await deleteArticleOpinionOptionAdmin(id, optionId);
+    if (!ok) return res.status(404).json({ error: 'Option not found' });
+
+    await logAdminAction({
+      action: 'opinion.option.delete',
+      entityType: 'article',
+      entityId: String(id),
+      summary: `Opinion option ${optionId} deleted for article ${id}`,
+      actor: actorFromReq(req)
+    });
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error('Failed to delete opinion option:', error);
+    return res.status(500).json({ error: 'Failed to delete option' });
   }
 });
 

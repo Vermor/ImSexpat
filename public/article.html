@@ -49,6 +49,10 @@
           <h2 id="opinionQuestion">Votre opinion</h2>
           <p id="opinionStatus" class="muted"></p>
           <div id="opinionOptions" class="opinion-options"></div>
+          <div class="opinion-actions">
+            <button id="openCustomOptionBtn" class="btn btn-ghost" type="button">Proposer mon propre choix</button>
+            <button id="openExplanationBtn" class="btn btn-ghost" type="button" hidden>Ajouter une explication</button>
+          </div>
           <form id="opinionExplanationForm" class="opinion-custom-form" hidden>
             <h3>Ajouter une explication (optionnel)</h3>
             <label class="field">
@@ -60,7 +64,7 @@
               <button id="skipExplanationBtn" class="btn btn-ghost" type="button">Passer</button>
             </div>
           </form>
-          <form id="opinionCustomForm" class="opinion-custom-form">
+          <form id="opinionCustomForm" class="opinion-custom-form" hidden>
             <h3>Autre proposition</h3>
             <label class="field">
               <span>Choix (max 60)</span>
@@ -97,6 +101,8 @@
       const opinionExplanationFormEl = document.getElementById('opinionExplanationForm');
       const voteExplanationInputEl = document.getElementById('voteExplanationInput');
       const skipExplanationBtnEl = document.getElementById('skipExplanationBtn');
+      const openCustomOptionBtnEl = document.getElementById('openCustomOptionBtn');
+      const openExplanationBtnEl = document.getElementById('openExplanationBtn');
       const opinionCustomFormEl = document.getElementById('opinionCustomForm');
       const customOptionLabelEl = document.getElementById('customOptionLabel');
       const customOptionDescriptionEl = document.getElementById('customOptionDescription');
@@ -178,6 +184,8 @@
       };
 
       let currentVotedOptionId = 0;
+      let customFormOpen = false;
+      let explanationFormOpen = false;
 
       const renderOpinion = (snapshot) => {
         if (!opinionBlockEl || !opinionOptionsEl || !snapshot || !snapshot.enabled) {
@@ -191,11 +199,38 @@
         setOpinionNotice(totalVotes ? `${totalVotes} vote(s)` : 'Soyez le premier a voter.');
 
         const selected = Number(snapshot.userVoteOptionId || 0) || 0;
+        const userCustomOptionId = Number(snapshot.userCustomOptionId || 0) || 0;
         currentVotedOptionId = selected || currentVotedOptionId;
-        if (opinionExplanationFormEl) {
-          opinionExplanationFormEl.hidden = !selected;
+        const selectedOption = (Array.isArray(snapshot.options) ? snapshot.options : []).find((x) => Number(x.id) === selected) || null;
+        const canExplain = Boolean(selected && selectedOption && !selectedOption.isMine);
+
+        if (openCustomOptionBtnEl) {
+          openCustomOptionBtnEl.hidden = Boolean(userCustomOptionId);
         }
-        if (voteExplanationInputEl && selected) {
+        if (opinionCustomFormEl) {
+          if (userCustomOptionId) {
+            customFormOpen = false;
+            opinionCustomFormEl.hidden = true;
+          } else {
+            opinionCustomFormEl.hidden = !customFormOpen;
+          }
+        }
+
+        if (openExplanationBtnEl) {
+          openExplanationBtnEl.hidden = !canExplain;
+          openExplanationBtnEl.textContent = String(snapshot.userExplanation || '').trim()
+            ? 'Modifier mon explication'
+            : 'Ajouter une explication';
+        }
+        if (opinionExplanationFormEl) {
+          if (!canExplain) {
+            explanationFormOpen = false;
+            opinionExplanationFormEl.hidden = true;
+          } else {
+            opinionExplanationFormEl.hidden = !explanationFormOpen;
+          }
+        }
+        if (voteExplanationInputEl && canExplain) {
           voteExplanationInputEl.value = String(snapshot.userExplanation || '');
         }
         const options = Array.isArray(snapshot.options) ? snapshot.options : [];
@@ -322,7 +357,13 @@
             const payload = await response.json();
             if (!response.ok) throw new Error(payload.error || 'Vote impossible');
             renderOpinion(payload.snapshot);
-            setOpinionNotice('Vote enregistre. Tu peux ajouter une explication (optionnel).');
+            const selectedOption = Array.isArray(payload.snapshot && payload.snapshot.options)
+              ? payload.snapshot.options.find((x) => Number(x.id) === Number(payload.snapshot.userVoteOptionId || 0))
+              : null;
+            const canExplain = Boolean(selectedOption && !selectedOption.isMine);
+            setOpinionNotice(canExplain
+              ? 'Vote enregistre. Tu peux ajouter une explication.'
+              : 'Vote enregistre.');
           } catch (error) {
             setOpinionNotice(error.message || 'Erreur', true);
           }
@@ -349,7 +390,9 @@
             renderOpinion(payload.snapshot);
             customOptionLabelEl.value = '';
             customOptionDescriptionEl.value = '';
-            setOpinionNotice('Vote enregistre. Tu peux ajouter une explication (optionnel).');
+            customFormOpen = false;
+            if (opinionCustomFormEl) opinionCustomFormEl.hidden = true;
+            setOpinionNotice('Choix ajoute et vote enregistre.');
           } catch (error) {
             setOpinionNotice(error.message || 'Erreur', true);
           }
@@ -376,6 +419,8 @@
             if (!response.ok) throw new Error(payload.error || 'Impossible denregistrer lexplication');
             renderOpinion(payload.snapshot);
             setOpinionNotice('Explication enregistree.');
+            explanationFormOpen = false;
+            if (opinionExplanationFormEl) opinionExplanationFormEl.hidden = true;
           } catch (error) {
             setOpinionNotice(error.message || 'Erreur', true);
           }
@@ -384,8 +429,23 @@
 
       if (skipExplanationBtnEl) {
         skipExplanationBtnEl.addEventListener('click', () => {
+          explanationFormOpen = false;
           if (opinionExplanationFormEl) opinionExplanationFormEl.hidden = true;
           setOpinionNotice('OK, vote enregistre sans explication.');
+        });
+      }
+
+      if (openCustomOptionBtnEl) {
+        openCustomOptionBtnEl.addEventListener('click', () => {
+          customFormOpen = true;
+          if (opinionCustomFormEl) opinionCustomFormEl.hidden = false;
+        });
+      }
+
+      if (openExplanationBtnEl) {
+        openExplanationBtnEl.addEventListener('click', () => {
+          explanationFormOpen = true;
+          if (opinionExplanationFormEl) opinionExplanationFormEl.hidden = false;
         });
       }
 

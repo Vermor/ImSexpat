@@ -65,6 +65,10 @@
             <span>Choix initiaux (1 par ligne, max 60)</span>
             <textarea name="opinionOptions" rows="4" maxlength="1200" placeholder="Option 1&#10;Option 2&#10;Option 3"></textarea>
           </label>
+          <div class="field">
+            <span>Choix actuels de l'article</span>
+            <div id="opinionOptionsAdminList" class="admin-list"></div>
+          </div>
 
           <h2>SEO</h2>
           <label class="field">
@@ -157,6 +161,7 @@
       const closeMediaPickerBtn = document.getElementById('closeMediaPickerBtn');
       const mediaPickerModal = document.getElementById('mediaPickerModal');
       const mediaPickerGrid = document.getElementById('mediaPickerGrid');
+      const opinionOptionsAdminList = document.getElementById('opinionOptionsAdminList');
 
       const draftKey = 'imsexpat_admin_article_draft_v1';
       let dirty = false;
@@ -418,6 +423,39 @@
         `;
       };
 
+      const renderOpinionOptionsAdmin = (items) => {
+        if (!opinionOptionsAdminList) return;
+        if (!Array.isArray(items) || !items.length) {
+          opinionOptionsAdminList.innerHTML = '<p class="muted">Aucun choix actuellement.</p>';
+          return;
+        }
+        opinionOptionsAdminList.innerHTML = items.map((opt) => `
+          <article class="list-item">
+            <div>
+              <strong>${escapeHtml(opt.label || '')}</strong>
+              <p class="muted">${opt.createdByUser ? 'Propose par un lecteur' : 'Choix initial'} · ${Number(opt.votes || 0)} vote(s)</p>
+              ${opt.description ? `<p class="muted">${escapeHtml(opt.description)}</p>` : ''}
+            </div>
+            <div class="list-actions">
+              <button class="btn btn-ghost" type="button" data-opinion-delete="${opt.id}">Supprimer</button>
+            </div>
+          </article>
+        `).join('');
+      };
+
+      const loadOpinionOptionsAdmin = async (articleId) => {
+        if (!opinionOptionsAdminList) return;
+        const id = Number(articleId || 0);
+        if (!id) {
+          opinionOptionsAdminList.innerHTML = '<p class="muted">Enregistre d abord l article pour gerer les choix.</p>';
+          return;
+        }
+        const response = await fetch(`/api/admin/articles/${id}/opinion-options`, { cache: 'no-store' });
+        if (!response.ok) throw new Error('Impossible de charger les choix d opinion');
+        const payload = await response.json();
+        renderOpinionOptionsAdmin(payload.items || []);
+      };
+
       const loadArticles = async (page = 1) => {
         currentPage = page;
         const params = new URLSearchParams({ page: String(page), pageSize: '12' });
@@ -455,6 +493,7 @@
         markClean();
         saveDraft();
         scheduleSlugCheck();
+        await loadOpinionOptionsAdmin(article.id);
       };
 
       const deleteOne = async (id) => {
@@ -494,6 +533,7 @@
         markClean();
         clearDraft();
         await loadArticles(currentPage);
+        await loadOpinionOptionsAdmin(form.elements.id.value);
         scheduleSlugCheck();
       });
 
@@ -576,6 +616,9 @@
       });
 
       resetBtn.addEventListener('click', () => resetForm());
+      resetBtn.addEventListener('click', () => {
+        loadOpinionOptionsAdmin(0).catch(() => {});
+      });
 
       window.addEventListener('beforeunload', (event) => {
         if (!dirty) return;
@@ -620,9 +663,28 @@
         closeMediaPicker();
       });
 
+      if (opinionOptionsAdminList) {
+        opinionOptionsAdminList.addEventListener('click', (event) => {
+          const optionId = Number(event.target.getAttribute('data-opinion-delete') || 0);
+          const articleId = Number(form.elements.id.value || 0);
+          if (!optionId || !articleId) return;
+          const ok = window.confirm('Supprimer ce choix ? Les votes/explications lies seront supprimes.');
+          if (!ok) return;
+          fetch(`/api/admin/articles/${articleId}/opinion-options/${optionId}`, { method: 'DELETE' })
+            .then(async (response) => {
+              const payload = await response.json().catch(() => ({}));
+              if (!response.ok) throw new Error(payload.error || 'Suppression impossible');
+              setStatus('Choix supprime.');
+              return loadOpinionOptionsAdmin(articleId);
+            })
+            .catch((error) => alert(error.message));
+        });
+      }
+
       loadDraft();
       scheduleSlugCheck();
       loadArticles(1).catch((error) => alert(error.message));
+      loadOpinionOptionsAdmin(form.elements.id.value || 0).catch(() => {});
     </script>
   </body>
 </html>

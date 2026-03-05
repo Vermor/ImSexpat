@@ -668,6 +668,7 @@ const getArticleOpinion = async (articleId, voterKey = '') => {
           label: opt.label,
           description: opt.description,
           createdByUser: opt.createdByUser,
+          isMine: Boolean(voterKey && opt.creatorKey && opt.creatorKey === voterKey),
           votes,
           likes
         };
@@ -682,12 +683,15 @@ const getArticleOpinion = async (articleId, voterKey = '') => {
         .map((x) => x.optionId)
       : [];
 
+    const userCustomOption = options.find((x) => x.createdByUser && x.isMine) || null;
+
     return {
       enabled: Boolean(article.opinionEnabled),
       question: String(article.opinionQuestion || ''),
       totalVotes: options.reduce((acc, x) => acc + x.votes, 0),
       userVoteOptionId: userVote ? userVote.optionId : null,
       userExplanation: userVote ? String(userVote.explanation || '') : '',
+      userCustomOptionId: userCustomOption ? userCustomOption.id : null,
       likedOptionIds,
       explanations: inMemoryOpinionVotes
         .filter((x) => x.articleId === articleId && String(x.explanation || '').trim())
@@ -714,7 +718,7 @@ const getArticleOpinion = async (articleId, voterKey = '') => {
   const article = articleRes.rows[0];
 
   const optionsRes = await pool.query(
-    `SELECT id, label, description, created_by_user, created_at
+    `SELECT id, label, description, created_by_user, creator_key, created_at
      FROM article_opinion_options
      WHERE article_id = $1
      ORDER BY created_by_user ASC, created_at ASC;`,
@@ -744,9 +748,11 @@ const getArticleOpinion = async (articleId, voterKey = '') => {
     label: x.label,
     description: x.description || '',
     createdByUser: Boolean(x.created_by_user),
+    isMine: Boolean(voterKey && x.creator_key && String(x.creator_key) === String(voterKey)),
     votes: voteCountMap.get(Number(x.id)) || 0,
     likes: likeCountMap.get(Number(x.id)) || 0
   }));
+  const userCustomOption = options.find((x) => x.createdByUser && x.isMine) || null;
 
   let userVoteOptionId = null;
   let userExplanation = '';
@@ -785,6 +791,7 @@ const getArticleOpinion = async (articleId, voterKey = '') => {
     totalVotes: options.reduce((acc, x) => acc + x.votes, 0),
     userVoteOptionId,
     userExplanation,
+    userCustomOptionId: userCustomOption ? userCustomOption.id : null,
     likedOptionIds,
     explanations: explanationsRes.rows.map((x) => ({
       optionId: Number(x.option_id),
@@ -823,10 +830,7 @@ const submitArticleOpinionVote = async (articleId, voterKey, input = {}) => {
       } else {
         const existingMine = inMemoryOpinionOptions.find((x) => x.articleId === articleId && x.createdByUser && x.creatorKey === safeVoterKey);
         if (existingMine) {
-          existingMine.label = customLabel;
-          existingMine.description = customDescription;
-          existingMine.updatedAt = new Date().toISOString();
-          targetOptionId = existingMine.id;
+          throw new Error('Custom option already exists for this voter');
         } else {
           targetOptionId = inMemoryOpinionOptionId;
           inMemoryOpinionOptions.push({
@@ -888,13 +892,7 @@ const submitArticleOpinionVote = async (articleId, voterKey, input = {}) => {
         [articleId, safeVoterKey]
       );
       if (mineRes.rowCount) {
-        targetOptionId = Number(mineRes.rows[0].id);
-        await pool.query(
-          `UPDATE article_opinion_options
-           SET label = $1, description = $2, updated_at = NOW()
-           WHERE id = $3;`,
-          [customLabel, customDescription, targetOptionId]
-        );
+        throw new Error('Custom option already exists for this voter');
       } else {
         const createdRes = await pool.query(
           `INSERT INTO article_opinion_options (article_id, label, description, created_by_user, creator_key, updated_at)
@@ -983,6 +981,75 @@ const toggleArticleOpinionLike = async (articleId, optionId, voterKey) => {
 
   const snapshot = await getArticleOpinion(articleId, safeVoterKey);
   return { liked, snapshot };
+};
+
+const listArticleOpinionOptionsAdmin = async (articleId) => {
+  const safeArticleId = Number(articleId || 0);
+  if (!safeArticleId) return [];
+
+  if (!pool) {
+    return inMemoryOpinionOptions
+      .filter((x) => x.articleId === safeArticleId)
+      .map((opt) => ({
+        id: opt.id,
+        label: opt.label,
+        description: opt.description || '',
+        createdByUser: Boolean(opt.createdByUser),
+        votes: inMemoryOpinionVotes.filter((v) => v.optionId === opt.id).length,
+        createdAt: opt.createdAt
+      }))
+      .sort((a, b) => Number(a.createdByUser) - Number(b.createdByUser) || new Date(a.createdAt) - new Date(b.createdAt));
+  }
+
+  const result = await pool.query(
+    `SELECT
+        o.id,
+        o.label,
+        o.description,
+        o.created_by_user,
+        o.created_at,
+        COUNT(v.id)::int AS votes
+      FROM article_opinion_options o
+      LEFT JOIN article_opinion_votes v ON v.option_id = o.id
+      WHERE o.article_id = $1
+      GROUP BY o.id
+      ORDER BY o.created_by_user ASC, o.created_at ASC;`,
+    [safeArticleId]
+  );
+
+  return result.rows.map((x) => ({
+    id: Number(x.id),
+    label: String(x.label || ''),
+    description: String(x.description || ''),
+    createdByUser: Boolean(x.created_by_user),
+    votes: Number(x.votes || 0),
+    createdAt: x.created_at
+  }));
+};
+
+const deleteArticleOpinionOptionAdmin = async (articleId, optionId) => {
+  const safeArticleId = Number(articleId || 0);
+  const safeOptionId = Number(optionId || 0);
+  if (!safeArticleId || !safeOptionId) return false;
+
+  if (!pool) {
+    const option = inMemoryOpinionOptions.find((x) => x.id === safeOptionId && x.articleId === safeArticleId);
+    if (!option) return false;
+    inMemoryOpinionOptions = inMemoryOpinionOptions.filter((x) => x.id !== safeOptionId);
+    inMemoryOpinionVotes = inMemoryOpinionVotes.filter((x) => x.optionId !== safeOptionId);
+    inMemoryOpinionLikes = inMemoryOpinionLikes.filter((x) => x.optionId !== safeOptionId);
+    return true;
+  }
+
+  const check = await pool.query(
+    'SELECT id FROM article_opinion_options WHERE id = $1 AND article_id = $2 LIMIT 1;',
+    [safeOptionId, safeArticleId]
+  );
+  if (check.rowCount === 0) return false;
+
+  // Votes/explications/likes tied to this option are removed by FK cascade.
+  const deleted = await pool.query('DELETE FROM article_opinion_options WHERE id = $1;', [safeOptionId]);
+  return deleted.rowCount > 0;
 };
 
 const createArticle = async (input) => {
@@ -1219,6 +1286,8 @@ module.exports = {
   getArticleOpinion,
   submitArticleOpinionVote,
   toggleArticleOpinionLike,
+  listArticleOpinionOptionsAdmin,
+  deleteArticleOpinionOptionAdmin,
   createArticle,
   updateArticle,
   deleteArticle,
