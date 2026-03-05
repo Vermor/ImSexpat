@@ -124,6 +124,29 @@
         }
       };
 
+      const normalizeTitleText = (value) => String(value || '')
+        .toLowerCase()
+        .replace(/[“”"']/g, '')
+        .replace(/[\s\-_:.!?;,()]+/g, ' ')
+        .trim();
+
+      const removeDuplicateLeadTitle = (html, articleTitle) => {
+        const wrap = document.createElement('div');
+        wrap.innerHTML = html || '';
+        const first = wrap.firstElementChild;
+        if (!first) return html || '';
+
+        const titleNorm = normalizeTitleText(articleTitle);
+        const firstNorm = normalizeTitleText(first.textContent || '');
+        if (!titleNorm || !firstNorm) return html || '';
+
+        if (firstNorm === titleNorm) {
+          first.remove();
+          return wrap.innerHTML;
+        }
+        return html || '';
+      };
+
       fetch('/api/articles?page=1&pageSize=1', { cache: 'no-store' })
         .then((res) => (res.ok ? res.json() : null))
         .then((payload) => {
@@ -149,13 +172,16 @@
           setMeta('meta[property=\"og:description\"]', article.seoDescription || article.excerpt || '');
           setMeta('meta[property=\"og:image\"]', article.ogImageUrl || article.coverImageUrl || '');
 
+          let contentHtml = article.content || '<p>Contenu vide.</p>';
           if (article.coverImageUrl) {
             coverEl.src = article.coverImageUrl;
             coverEl.alt = article.title;
             coverEl.hidden = false;
+          } else {
+            contentHtml = removeDuplicateLeadTitle(contentHtml, article.title || '');
           }
 
-          contentEl.innerHTML = article.content || '<p>Contenu vide.</p>';
+          contentEl.innerHTML = contentHtml;
         })
         .catch(() => {
           titleEl.textContent = 'Article introuvable';

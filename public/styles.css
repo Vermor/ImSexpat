@@ -431,6 +431,12 @@ textarea {
   color: var(--ink);
 }
 
+.article-meta + .article-excerpt {
+  margin-top: 0.6rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--line);
+}
+
 .article-view h1 {
   margin-top: 0;
 }
