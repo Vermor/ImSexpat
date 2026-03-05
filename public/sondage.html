@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sondage | Vermor Club</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/">VERMOR CLUB</a>
+      <nav class="site-nav" aria-label="Navigation principale">
+        <a class="nav-link" href="/">Accueil</a>
+        <a class="nav-link" href="/articles">Articles</a>
+        <a class="nav-link" href="/sondage">Sondage</a>
+        <div class="nav-dropdown" id="categoriesDropdown">
+          <button
+            id="categoriesToggle"
+            class="nav-link dropdown-toggle"
+            type="button"
+            aria-haspopup="true"
+            aria-expanded="false"
+          >
+            Categories
+          </button>
+          <div id="categoriesMenu" class="dropdown-menu" hidden>
+            <a class="dropdown-item" href="/articles">Toutes categories</a>
+          </div>
+        </div>
+      </nav>
+      <a class="admin-link" href="/admin">Admin</a>
+    </header>
+
+    <main class="container">
+      <section class="card">
+        <h1>Sondages actifs</h1>
+        <p class="muted">Questions d'opinion ouvertes sur les articles.</p>
+      </section>
+
+      <section class="card">
+        <div id="pollList" class="admin-list"></div>
+      </section>
+    </main>
+
+    <script>
+      const pollListEl = document.getElementById('pollList');
+      const categoriesDropdownEl = document.getElementById('categoriesDropdown');
+      const categoriesToggleEl = document.getElementById('categoriesToggle');
+      const categoriesMenuEl = document.getElementById('categoriesMenu');
+
+      const closeCategoriesMenu = () => {
+        if (!categoriesToggleEl || !categoriesMenuEl) return;
+        categoriesToggleEl.setAttribute('aria-expanded', 'false');
+        categoriesMenuEl.hidden = true;
+      };
+
+      const openCategoriesMenu = () => {
+        if (!categoriesToggleEl || !categoriesMenuEl) return;
+        categoriesToggleEl.setAttribute('aria-expanded', 'true');
+        categoriesMenuEl.hidden = false;
+      };
+
+      const escapeHtml = (value) => String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+
+      const renderCategoryMenu = (categories) => {
+        if (!categoriesMenuEl) return;
+        const safe = Array.isArray(categories) ? categories.filter(Boolean) : [];
+        const links = ['<a class="dropdown-item" href="/articles">Toutes categories</a>']
+          .concat(safe.map((category) => `<a class="dropdown-item" href="/articles?category=${encodeURIComponent(category)}">${escapeHtml(category)}</a>`));
+        categoriesMenuEl.innerHTML = links.join('');
+      };
+
+      const fetchOpinionArticles = async () => {
+        const pageSize = 50;
+        const items = [];
+        for (let page = 1; page <= 20; page += 1) {
+          const response = await fetch(`/api/articles?page=${page}&pageSize=${pageSize}`, { cache: 'no-store' });
+          if (!response.ok) throw new Error('Impossible de charger les articles');
+          const payload = await response.json();
+          const pageItems = Array.isArray(payload.items) ? payload.items : [];
+          items.push(...pageItems);
+          const totalPages = Number(payload.pagination && payload.pagination.totalPages || 1);
+          if (page >= totalPages) {
+            return {
+              items,
+              categories: payload.taxonomies && Array.isArray(payload.taxonomies.categories) ? payload.taxonomies.categories : []
+            };
+          }
+        }
+        return { items, categories: [] };
+      };
+
+      const renderPollCards = (rows) => {
+        if (!pollListEl) return;
+        if (!rows.length) {
+          pollListEl.innerHTML = '<p class="muted">Aucun sondage actif pour le moment.</p>';
+          return;
+        }
+
+        pollListEl.innerHTML = `
+          <div class="article-card-grid">
+            ${rows.map((row) => {
+              const options = Array.isArray(row.snapshot.options) ? row.snapshot.options : [];
+              const total = Number(row.snapshot.totalVotes || 0);
+              const optionsHtml = options.map((opt) => {
+                const votes = Number(opt.votes || 0);
+                const pct = total > 0 ? Math.round((votes / total) * 100) : 0;
+                return `
+                  <div class="poll-result-item">
+                    <div class="poll-result-head">
+                      <strong>${escapeHtml(opt.label)}</strong>
+                      <span class="muted">${votes} vote(s) - ${pct}%</span>
+                    </div>
+                    <div class="opinion-bar"><span style="width:${pct}%;"></span></div>
+                  </div>
+                `;
+              }).join('');
+
+              return `
+                <article class="article-card">
+                  <div class="article-card-body">
+                    <h2>${escapeHtml(row.snapshot.question || row.article.opinionQuestion || 'Sondage')}</h2>
+                    <a class="poll-article-link" href="/article/${encodeURIComponent(row.article.slug)}">
+                      ${row.article.coverImageUrl ? `<img class="article-card-cover poll-cover-thumb" src="${row.article.coverImageUrl}" alt="${escapeHtml(row.article.title)}" loading="lazy" />` : ''}
+                      <span>${escapeHtml(row.article.title || 'Voir l article')}</span>
+                    </a>
+                    <p class="muted">Resultat actuel: ${total} vote(s)</p>
+                    <div class="poll-results">${optionsHtml || '<p class="muted">Aucun choix pour ce sondage.</p>'}</div>
+                  </div>
+                </article>
+              `;
+            }).join('')}
+          </div>
+        `;
+      };
+
+      const loadPage = async () => {
+        try {
+          const data = await fetchOpinionArticles();
+          renderCategoryMenu(data.categories);
+          const opinionArticles = (Array.isArray(data.items) ? data.items : [])
+            .filter((a) => Boolean(a && a.opinionEnabled && a.slug));
+
+          if (!opinionArticles.length) {
+            renderPollCards([]);
+            return;
+          }
+
+          const rows = await Promise.all(opinionArticles.map(async (article) => {
+            const response = await fetch(`/api/articles/${encodeURIComponent(article.slug)}/opinion`, { cache: 'no-store' });
+            if (!response.ok) return null;
+            const snapshot = await response.json();
+            if (!snapshot || !snapshot.enabled) return null;
+            return { article, snapshot };
+          }));
+
+          renderPollCards(rows.filter(Boolean));
+        } catch (error) {
+          if (pollListEl) pollListEl.innerHTML = `<p class="error">${escapeHtml(error.message || 'Erreur de chargement')}</p>`;
+        }
+      };
+
+      if (categoriesToggleEl && categoriesDropdownEl) {
+        categoriesToggleEl.addEventListener('click', (event) => {
+          event.preventDefault();
+          const expanded = categoriesToggleEl.getAttribute('aria-expanded') === 'true';
+          if (expanded) {
+            closeCategoriesMenu();
+            return;
+          }
+          openCategoriesMenu();
+        });
+
+        document.addEventListener('click', (event) => {
+          if (!categoriesDropdownEl.contains(event.target)) closeCategoriesMenu();
+        });
+
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') closeCategoriesMenu();
+        });
+
+        categoriesMenuEl.addEventListener('click', () => {
+          closeCategoriesMenu();
+        });
+      }
+
+      loadPage().catch(() => {});
+    </script>
+  </body>
+</html>

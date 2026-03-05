@@ -444,6 +444,8 @@ app.get('/api/articles/:slug/opinion', async (req, res) => {
   }
 });
 
+app.get('/sondage', (req, res) => res.sendFile(path.join(__dirname, 'public', 'sondage.html')));
+
 app.post('/api/articles/:slug/opinion/vote', opinionRateLimit, async (req, res) => {
   try {
     const article = await getArticleBySlug(req.params.slug);
