@@ -182,13 +182,13 @@
       };
 
       const renderRubricBlock = (title, articles) => {
-        if (!Array.isArray(articles) || !articles.length) return '';
+        const safeArticles = Array.isArray(articles) ? articles : [];
         return `
-          <section class="rubric-block">
+          <section class="rubric-tile">
             <h3>${escapeHtml(title)}</h3>
-            <div class="article-card-grid">
-              ${articles.map((article) => `
-                <article class="article-card">
+            <div class="rubric-articles">
+              ${safeArticles.length ? safeArticles.map((article) => `
+                <article class="rubric-article-card">
                   ${article.coverImageUrl ? `<a href="/article/${encodeURIComponent(article.slug)}"><img class="article-card-cover" src="${article.coverImageUrl}" alt="${escapeHtml(article.title)}" loading="lazy" /></a>` : ''}
                   <div class="article-card-body">
                     ${renderCategoryLine(article)}
@@ -196,7 +196,7 @@
                     ${article.excerpt ? `<p class="article-excerpt">${escapeHtml(article.excerpt)}</p>` : ''}
                   </div>
                 </article>
-              `).join('')}
+              `).join('') : '<p class="muted">Aucun article dans cette rubrique pour le moment.</p>'}
             </div>
           </section>
         `;
@@ -232,12 +232,8 @@
         }));
 
         const html = blocks.filter(Boolean).join('');
-        if (!html) {
-          rubricsSectionEl.hidden = true;
-          rubricsBlocksEl.innerHTML = '';
-          return;
-        }
-        rubricsBlocksEl.innerHTML = html;
+        rubricsSectionEl.hidden = false;
+        rubricsBlocksEl.innerHTML = `<div class="rubric-grid">${html}</div>`;
       };
 
       const loadLatestArticle = async () => {

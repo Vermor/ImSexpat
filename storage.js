@@ -362,16 +362,18 @@ const listArticles = async (options = {}) => {
   const q = String(options.q || '').trim();
   const category = String(options.category || '').trim();
   const categories = normalizeList(options.categories).slice(0, 12);
+  const categoryNeedle = category.toLowerCase();
+  const categoryNeedles = categories.map((x) => x.toLowerCase());
   const tag = String(options.tag || '').trim();
   const publishedOnly = Boolean(options.publishedOnly);
 
   if (!pool) {
     let items = [...inMemoryArticles];
     if (publishedOnly) items = items.filter((a) => a.published);
-    if (categories.length) {
-      items = items.filter((a) => (a.categories || []).some((c) => categories.includes(c)));
-    } else if (category) {
-      items = items.filter((a) => (a.categories || []).includes(category));
+    if (categoryNeedles.length) {
+      items = items.filter((a) => (a.categories || []).some((c) => categoryNeedles.includes(String(c || '').toLowerCase())));
+    } else if (categoryNeedle) {
+      items = items.filter((a) => (a.categories || []).some((c) => String(c || '').toLowerCase() === categoryNeedle));
     }
     if (tag) items = items.filter((a) => (a.tags || []).includes(tag));
     if (q) {
@@ -394,12 +396,12 @@ const listArticles = async (options = {}) => {
     values.push(true);
     where.push(`published = $${values.length}`);
   }
-  if (categories.length) {
-    values.push(categories);
-    where.push(`categories && $${values.length}::text[]`);
-  } else if (category) {
-    values.push(category);
-    where.push(`$${values.length} = ANY(categories)`);
+  if (categoryNeedles.length) {
+    values.push(categoryNeedles);
+    where.push(`EXISTS (SELECT 1 FROM unnest(categories) AS c WHERE lower(c) = ANY($${values.length}::text[]))`);
+  } else if (categoryNeedle) {
+    values.push(categoryNeedle);
+    where.push(`EXISTS (SELECT 1 FROM unnest(categories) AS c WHERE lower(c) = $${values.length})`);
   }
   if (tag) {
     values.push(tag);
