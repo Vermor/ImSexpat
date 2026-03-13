@@ -172,6 +172,19 @@ const toAbsoluteUrl = (value, req) => {
   return `${origin}/${raw}`;
 };
 
+const escapeXml = (value) => String(value ?? '')
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&apos;');
+
+const toIsoDate = (value) => {
+  const date = new Date(value || Date.now());
+  if (Number.isNaN(date.getTime())) return new Date().toISOString();
+  return date.toISOString();
+};
+
 const opinionRateWindowMs = 60 * 1000;
 const opinionRateMax = 15;
 const opinionRateStore = new Map();
@@ -345,6 +358,63 @@ const actorFromReq = (req) => sanitizeText(req.headers['x-forwarded-for'] || req
 
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/articles', (req, res) => res.sendFile(path.join(__dirname, 'public', 'articles.html')));
+app.get('/sitemap.xml', async (req, res) => {
+  try {
+    const origin = getRequestOrigin(req);
+    const nowIso = toIsoDate(new Date());
+    const entries = [
+      { loc: `${origin}/`, changefreq: 'daily', priority: '1.0', lastmod: nowIso },
+      { loc: `${origin}/articles`, changefreq: 'daily', priority: '0.9', lastmod: nowIso },
+      { loc: `${origin}/sondage`, changefreq: 'daily', priority: '0.8', lastmod: nowIso }
+    ];
+    const seen = new Set(entries.map((entry) => entry.loc));
+
+    let page = 1;
+    let totalPages = 1;
+    while (page <= totalPages) {
+      const result = await listArticles({
+        page,
+        pageSize: 50,
+        publishedOnly: true
+      });
+
+      totalPages = Math.max(1, Number(result.pagination?.totalPages || 1));
+      const items = Array.isArray(result.items) ? result.items : [];
+
+      for (const item of items) {
+        if (!item || !item.slug) continue;
+        const loc = `${origin}/article/${encodeURIComponent(item.slug)}`;
+        if (seen.has(loc)) continue;
+        seen.add(loc);
+        entries.push({
+          loc,
+          changefreq: 'weekly',
+          priority: '0.7',
+          lastmod: toIsoDate(item.updatedAt || item.createdAt || nowIso)
+        });
+      }
+
+      page += 1;
+    }
+
+    const urlNodes = entries.map((entry) => `  <url>
+    <loc>${escapeXml(entry.loc)}</loc>
+    <lastmod>${escapeXml(entry.lastmod)}</lastmod>
+    <changefreq>${escapeXml(entry.changefreq)}</changefreq>
+    <priority>${escapeXml(entry.priority)}</priority>
+  </url>`).join('\n');
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urlNodes}
+</urlset>`;
+
+    res.type('application/xml').send(xml);
+  } catch (error) {
+    console.error('Failed to generate sitemap:', error);
+    res.status(500).type('text/plain').send('Failed to generate sitemap');
+  }
+});
 app.get('/article/:slug', async (req, res) => {
   try {
     res.setHeader('Cache-Control', 'no-store, max-age=0');

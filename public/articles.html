@@ -6,6 +6,29 @@
     <script defer src="https://cloud.umami.is/script.js" data-website-id="6bc3b940-4007-4983-97d0-43c720a5ccc1"></script>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <title>Articles | Vermor Club</title>
+    <meta name="description" content="Tous les articles Vermor Club: actualites, analyses et debats par categorie." />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <link rel="canonical" href="/articles" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Vermor Club" />
+    <meta property="og:title" content="Articles | Vermor Club" />
+    <meta property="og:description" content="Tous les articles Vermor Club: actualites, analyses et debats par categorie." />
+    <meta property="og:url" content="/articles" />
+    <meta property="og:image" content="/favicon.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Articles | Vermor Club" />
+    <meta name="twitter:description" content="Tous les articles Vermor Club: actualites, analyses et debats par categorie." />
+    <meta name="twitter:image" content="/favicon.png" />
+    <script type="application/ld+json" id="articlesJsonLd">
+      {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "name": "Articles Vermor Club",
+        "url": "/articles",
+        "inLanguage": "fr"
+      }
+    </script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -71,6 +94,28 @@
         .replaceAll('>', '&gt;')
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
+
+      const setSeoForArticlesPage = () => {
+        const canonical = document.querySelector('link[rel="canonical"]');
+        if (canonical) canonical.setAttribute('href', `${window.location.origin}/articles`);
+        const ogUrl = document.querySelector('meta[property="og:url"]');
+        if (ogUrl) ogUrl.setAttribute('content', `${window.location.origin}/articles`);
+        const ogImage = document.querySelector('meta[property="og:image"]');
+        if (ogImage) ogImage.setAttribute('content', `${window.location.origin}/favicon.png`);
+        const twImage = document.querySelector('meta[name="twitter:image"]');
+        if (twImage) twImage.setAttribute('content', `${window.location.origin}/favicon.png`);
+
+        const jsonLd = document.getElementById('articlesJsonLd');
+        if (jsonLd) {
+          jsonLd.textContent = JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'CollectionPage',
+            name: 'Articles Vermor Club',
+            url: `${window.location.origin}/articles`,
+            inLanguage: 'fr'
+          });
+        }
+      };
 
       const categoryStyle = (value) => {
         const text = String(value || '');
@@ -178,6 +223,7 @@
         window.history.replaceState(null, '', `${nextUrl.pathname}?${nextUrl.searchParams.toString()}`);
       };
 
+      setSeoForArticlesPage();
       qEl.value = state.q;
       if (categoriesToggleEl && categoriesDropdownEl) {
         categoriesToggleEl.addEventListener('click', (event) => {

@@ -6,3 +6,4 @@ Allow: /
 
 User-agent: *
 Allow: /
+Sitemap: https://vermor.club/sitemap.xml

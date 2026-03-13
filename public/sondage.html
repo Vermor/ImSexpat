@@ -5,6 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script defer src="https://cloud.umami.is/script.js" data-website-id="6bc3b940-4007-4983-97d0-43c720a5ccc1"></script>
     <title>Sondage | Vermor Club</title>
+    <meta name="description" content="Sondages actifs Vermor Club: participez et consultez les resultats des opinions sur les articles." />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <link rel="canonical" href="/sondage" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Vermor Club" />
+    <meta property="og:title" content="Sondage | Vermor Club" />
+    <meta property="og:description" content="Sondages actifs Vermor Club: participez et consultez les resultats des opinions sur les articles." />
+    <meta property="og:url" content="/sondage" />
+    <meta property="og:image" content="/favicon.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Sondage | Vermor Club" />
+    <meta name="twitter:description" content="Sondages actifs Vermor Club: participez et consultez les resultats des opinions sur les articles." />
+    <meta name="twitter:image" content="/favicon.png" />
+    <script type="application/ld+json" id="pollJsonLd">
+      {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "name": "Sondages actifs Vermor Club",
+        "url": "/sondage",
+        "inLanguage": "fr"
+      }
+    </script>
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="stylesheet" href="/styles.css" />
   </head>
@@ -69,6 +92,28 @@
         .replaceAll('"', '&quot;')
         .replaceAll("'", '&#39;');
 
+      const setSeoForPollPage = () => {
+        const canonical = document.querySelector('link[rel="canonical"]');
+        if (canonical) canonical.setAttribute('href', `${window.location.origin}/sondage`);
+        const ogUrl = document.querySelector('meta[property="og:url"]');
+        if (ogUrl) ogUrl.setAttribute('content', `${window.location.origin}/sondage`);
+        const ogImage = document.querySelector('meta[property="og:image"]');
+        if (ogImage) ogImage.setAttribute('content', `${window.location.origin}/favicon.png`);
+        const twImage = document.querySelector('meta[name="twitter:image"]');
+        if (twImage) twImage.setAttribute('content', `${window.location.origin}/favicon.png`);
+
+        const jsonLd = document.getElementById('pollJsonLd');
+        if (jsonLd) {
+          jsonLd.textContent = JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'CollectionPage',
+            name: 'Sondages actifs Vermor Club',
+            url: `${window.location.origin}/sondage`,
+            inLanguage: 'fr'
+          });
+        }
+      };
+
       const renderCategoryMenu = (categories) => {
         if (!categoriesMenuEl) return;
         const safe = Array.isArray(categories) ? categories.filter(Boolean) : [];
@@ -108,7 +153,7 @@
           const text = String(value ?? '').trim();
           if (!text) return '';
           if (text.length <= maxLength) return text;
-          return `${text.slice(0, maxLength - 1).trimEnd()}…`;
+          return `${text.slice(0, maxLength - 3).trimEnd()}...`;
         };
 
         pollListEl.innerHTML = `
@@ -198,6 +243,7 @@
         });
       }
 
+      setSeoForPollPage();
       loadPage().catch(() => {});
     </script>
   </body>

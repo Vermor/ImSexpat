@@ -5,8 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script defer src="https://cloud.umami.is/script.js" data-website-id="6bc3b940-4007-4983-97d0-43c720a5ccc1"></script>
     <link rel="icon" type="image/png" href="/favicon.png" />
-    <title>Vermor Club</title>
-    <meta name="description" content="Vermor Club" />
+    <title>Vermor Club | Actualites et analyses</title>
+    <meta name="description" content="Vermor Club: actualites, analyses et debats sur les sujets qui comptent." />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <link rel="canonical" href="/" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Vermor Club" />
+    <meta property="og:title" content="Vermor Club | Actualites et analyses" />
+    <meta property="og:description" content="Vermor Club: actualites, analyses et debats sur les sujets qui comptent." />
+    <meta property="og:url" content="/" />
+    <meta property="og:image" content="/favicon.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Vermor Club | Actualites et analyses" />
+    <meta name="twitter:description" content="Vermor Club: actualites, analyses et debats sur les sujets qui comptent." />
+    <meta name="twitter:image" content="/favicon.png" />
+    <script type="application/ld+json" id="homeJsonLd">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Vermor Club",
+        "url": "/",
+        "inLanguage": "fr"
+      }
+    </script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -64,11 +86,35 @@
         }
       };
 
-      const setMetaDescription = (value) => {
-        const meta = document.querySelector('meta[name="description"]');
-        if (meta && value) {
-          meta.setAttribute('content', value);
+      const setMetaContent = (selector, value) => {
+        const el = document.querySelector(selector);
+        if (el && typeof value === 'string' && value.trim()) {
+          el.setAttribute('content', value.trim());
         }
+      };
+
+      const setCanonical = () => {
+        const canonical = document.querySelector('link[rel="canonical"]');
+        if (!canonical) return;
+        canonical.setAttribute('href', `${window.location.origin}/`);
+      };
+
+      const setJsonLd = (titleText, descriptionText, siteNameText) => {
+        const scriptEl = document.getElementById('homeJsonLd');
+        if (!scriptEl) return;
+        scriptEl.textContent = JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'WebSite',
+          name: siteNameText || 'Vermor Club',
+          url: `${window.location.origin}/`,
+          inLanguage: 'fr',
+          description: descriptionText || 'Vermor Club',
+          potentialAction: {
+            '@type': 'SearchAction',
+            target: `${window.location.origin}/articles?q={search_term_string}`,
+            'query-input': 'required name=search_term_string'
+          }
+        });
       };
 
       const categoriesToggleEl = document.getElementById('categoriesToggle');
@@ -105,13 +151,30 @@
       const applyLandingContent = (content) => {
         if (!content || typeof content !== 'object') return;
 
+        const pageTitle = String(content.pageTitle || '').trim();
+        const metaDescription = String(content.metaDescription || '').trim();
+        const siteName = String(content.siteName || 'Vermor Club').trim() || 'Vermor Club';
+
         if (content.pageTitle) {
-          document.title = content.pageTitle;
+          document.title = pageTitle;
+          setMetaContent('meta[property="og:title"]', pageTitle);
+          setMetaContent('meta[name="twitter:title"]', pageTitle);
         }
 
-        setMetaDescription(content.metaDescription);
+        if (metaDescription) {
+          setMetaContent('meta[name="description"]', metaDescription);
+          setMetaContent('meta[property="og:description"]', metaDescription);
+          setMetaContent('meta[name="twitter:description"]', metaDescription);
+        }
+
         setText('brand', content.siteName);
         setText('footerText', content.footerText || content.siteName);
+        setMetaContent('meta[property="og:site_name"]', siteName);
+        setMetaContent('meta[property="og:url"]', `${window.location.origin}/`);
+        setMetaContent('meta[property="og:image"]', `${window.location.origin}/favicon.png`);
+        setMetaContent('meta[name="twitter:image"]', `${window.location.origin}/favicon.png`);
+        setCanonical();
+        setJsonLd(pageTitle || document.title, metaDescription || '', siteName);
         landingRubrics = Array.isArray(content.rubrics) ? content.rubrics : [];
       };
 
@@ -415,6 +478,11 @@
       }
       const initHome = async () => {
         usedHomepageArticleKeys.clear();
+        setCanonical();
+        setMetaContent('meta[property="og:url"]', `${window.location.origin}/`);
+        setMetaContent('meta[property="og:image"]', `${window.location.origin}/favicon.png`);
+        setMetaContent('meta[name="twitter:image"]', `${window.location.origin}/favicon.png`);
+        setJsonLd(document.title, document.querySelector('meta[name="description"]')?.getAttribute('content') || '', 'Vermor Club');
         await loadLandingContent();
         await loadFeaturedArticle();
         await loadRubrics().catch(() => {
