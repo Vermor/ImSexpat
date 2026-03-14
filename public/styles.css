@@ -294,7 +294,7 @@ textarea {
   background: #fff;
   border: 1px solid #b9b9b9;
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .rich-editor .ql-toolbar.ql-snow {
@@ -306,6 +306,12 @@ textarea {
   border: 0;
   min-height: 240px;
   font-size: 1rem;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+.rich-editor .ql-tooltip {
+  z-index: 6;
 }
 
 .editor-toolbar-row {

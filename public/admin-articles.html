@@ -185,6 +185,39 @@
         }
       });
 
+      const toolbar = quill.getModule('toolbar');
+      if (toolbar) {
+        toolbar.addHandler('link', (value) => {
+          if (!value) {
+            quill.format('link', false, 'user');
+            return;
+          }
+
+          const range = quill.getSelection(true);
+          if (!range) return;
+
+          let href = window.prompt('URL du lien (ex: https://exemple.com)', 'https://');
+          if (!href) return;
+          href = href.trim();
+          if (!href) return;
+
+          if (!/^(https?:\/\/|mailto:|\/|#)/i.test(href)) {
+            href = `https://${href}`;
+          }
+
+          if (range.length === 0) {
+            const text = href.replace(/^https?:\/\//i, '');
+            quill.insertText(range.index, text, { link: href }, 'user');
+            quill.setSelection(range.index + text.length, 0, 'silent');
+          } else {
+            quill.format('link', href, 'user');
+          }
+
+          markDirty();
+          saveDraft();
+        });
+      }
+
       const insertImageAtCursor = (url) => {
         if (!url) return;
         const range = lastRange || quill.getSelection() || { index: quill.getLength(), length: 0 };
