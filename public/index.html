@@ -20,6 +20,7 @@
     <meta name="twitter:title" content="Vermor Club | Actualites et analyses" />
     <meta name="twitter:description" content="Vermor Club: actualites, analyses et debats sur les sujets qui comptent." />
     <meta name="twitter:image" content="/favicon.png" />
+    <link rel="stylesheet" href="/theme/line-awesome.min.css" />
     <script type="application/ld+json" id="homeJsonLd">
       {
         "@context": "https://schema.org",
@@ -31,9 +32,14 @@
     </script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
+  <body class="page-home">
     <header class="site-header">
-      <div class="brand" id="brand">Vermor Club</div>
+      <div class="header-social" aria-label="Raccourcis sociaux">
+        <a href="/" aria-label="Facebook"><i class="lab la-facebook-f"></i></a>
+        <a href="/articles" aria-label="Magazine"><i class="las la-newspaper"></i></a>
+        <a href="/sondage" aria-label="Debats"><i class="las la-comments"></i></a>
+      </div>
+      <a class="brand" id="brand" href="/">Vermor Club</a>
       <nav class="site-nav" aria-label="Navigation principale">
         <a class="nav-link" href="/">Accueil</a>
         <a class="nav-link" href="/articles">Articles</a>
@@ -57,6 +63,16 @@
     </header>
 
     <main>
+      <section class="page-hero">
+        <p class="kicker">Magazine numerique</p>
+        <h1 id="landingHeadline">Vermor Club</h1>
+        <p class="subtitle" id="landingLead">Actualites, analyses et debats mis en scene dans une lecture type magazine.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="/articles">Lire les articles</a>
+          <a class="btn btn-ghost" href="/sondage">Voir les sondages</a>
+        </div>
+      </section>
+
       <section class="hero featured-hero" id="featuredHero">
         <p class="muted">Chargement de l'article en vedette...</p>
       </section>
@@ -75,6 +91,11 @@
     </main>
 
     <footer class="site-footer">
+      <div class="footer-social" aria-label="Navigation rapide">
+        <a href="/" aria-label="Accueil"><i class="las la-home"></i></a>
+        <a href="/articles" aria-label="Articles"><i class="las la-book-open"></i></a>
+        <a href="/sondage" aria-label="Sondage"><i class="las la-poll"></i></a>
+      </div>
       <p>© <span id="year"></span> <span id="footerText">Vermor Club</span></p>
     </footer>
 
@@ -165,9 +186,11 @@
           setMetaContent('meta[name="description"]', metaDescription);
           setMetaContent('meta[property="og:description"]', metaDescription);
           setMetaContent('meta[name="twitter:description"]', metaDescription);
+          setText('landingLead', metaDescription);
         }
 
         setText('brand', content.siteName);
+        setText('landingHeadline', content.siteName);
         setText('footerText', content.footerText || content.siteName);
         setMetaContent('meta[property="og:site_name"]', siteName);
         setMetaContent('meta[property="og:url"]', `${window.location.origin}/`);
