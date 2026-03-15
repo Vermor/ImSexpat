@@ -13,17 +13,11 @@
     <meta property="og:description" content="" />
     <meta property="og:image" content="" />
     <meta property="og:url" content="" />
-    <link rel="stylesheet" href="/theme/line-awesome.min.css" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body class="page-article">
+  <body>
     <header class="site-header">
-      <div class="header-social" aria-label="Raccourcis sociaux">
-        <a href="/" aria-label="Facebook"><i class="lab la-facebook-f"></i></a>
-        <a href="/articles" aria-label="Magazine"><i class="las la-newspaper"></i></a>
-        <a href="/sondage" aria-label="Debats"><i class="las la-comments"></i></a>
-      </div>
-      <a class="brand" href="/">Vermor Club</a>
+      <div class="brand">Vermor Club</div>
       <nav class="site-nav" aria-label="Navigation principale">
         <a class="nav-link" href="/">Accueil</a>
         <a class="nav-link" href="/articles">Articles</a>
@@ -47,12 +41,6 @@
     </header>
 
     <main>
-      <section class="page-hero">
-        <p class="kicker">Lecture</p>
-        <h1 id="articleHeroTitle">Chargement de l'article...</h1>
-        <p class="subtitle" id="articleHeroLead">Preparation de la page article.</p>
-      </section>
-
       <article class="admin-panel admin-panel-wide article-view">
         <h1 id="title">Chargement...</h1>
         <p id="meta" class="article-meta" hidden></p>
@@ -100,22 +88,11 @@
       </article>
     </main>
 
-    <footer class="site-footer">
-      <div class="footer-social" aria-label="Navigation rapide">
-        <a href="/" aria-label="Accueil"><i class="las la-home"></i></a>
-        <a href="/articles" aria-label="Articles"><i class="las la-book-open"></i></a>
-        <a href="/sondage" aria-label="Sondage"><i class="las la-poll"></i></a>
-      </div>
-      <p>Lecture Vermor Club</p>
-    </footer>
-
     <script>
       const pathParts = window.location.pathname.split('/').filter(Boolean);
       const slug = pathParts[pathParts.length - 1] || '';
 
       const titleEl = document.getElementById('title');
-      const articleHeroTitleEl = document.getElementById('articleHeroTitle');
-      const articleHeroLeadEl = document.getElementById('articleHeroLead');
       const metaEl = document.getElementById('meta');
       const excerptEl = document.getElementById('excerpt');
       const contentEl = document.getElementById('content');
@@ -342,8 +319,6 @@
         })
         .then((article) => {
           titleEl.textContent = article.title;
-          if (articleHeroTitleEl) articleHeroTitleEl.textContent = article.title || 'Article';
-          if (articleHeroLeadEl) articleHeroLeadEl.textContent = article.excerpt || 'Lecture detaillee d un article Vermor Club.';
           renderMetaLine(article);
           excerptEl.textContent = article.excerpt || '';
           document.title = article.seoTitle || article.title || 'Article | Vermor Club';
@@ -363,8 +338,6 @@
         })
         .catch(() => {
           titleEl.textContent = 'Article introuvable';
-          if (articleHeroTitleEl) articleHeroTitleEl.textContent = 'Article introuvable';
-          if (articleHeroLeadEl) articleHeroLeadEl.textContent = 'Ce contenu n est pas disponible.';
           metaEl.hidden = true;
           metaEl.innerHTML = '';
           excerptEl.textContent = '';

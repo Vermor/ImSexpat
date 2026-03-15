@@ -20,7 +20,6 @@
     <meta name="twitter:title" content="Articles | Vermor Club" />
     <meta name="twitter:description" content="Tous les articles Vermor Club: actualites, analyses et debats par categorie." />
     <meta name="twitter:image" content="/favicon.png" />
-    <link rel="stylesheet" href="/theme/line-awesome.min.css" />
     <script type="application/ld+json" id="articlesJsonLd">
       {
         "@context": "https://schema.org",
@@ -32,14 +31,9 @@
     </script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body class="page-articles">
+  <body>
     <header class="site-header">
-      <div class="header-social" aria-label="Raccourcis sociaux">
-        <a href="/" aria-label="Facebook"><i class="lab la-facebook-f"></i></a>
-        <a href="/articles" aria-label="Magazine"><i class="las la-newspaper"></i></a>
-        <a href="/sondage" aria-label="Debats"><i class="las la-comments"></i></a>
-      </div>
-      <a class="brand" href="/">Vermor Club</a>
+      <div class="brand">Vermor Club</div>
       <nav class="site-nav" aria-label="Navigation principale">
         <a class="nav-link" href="/">Accueil</a>
         <a class="nav-link" href="/articles">Articles</a>
@@ -63,12 +57,6 @@
     </header>
 
     <main>
-      <section class="page-hero">
-        <p class="kicker">Collection</p>
-        <h1>Articles et analyses</h1>
-        <p class="subtitle">Parcourez toutes les publications avec un habillage editorial inspire du template blog.</p>
-      </section>
-
       <section class="admin-panel admin-panel-wide">
         <h1>Articles</h1>
         <div class="filter-row">
@@ -81,15 +69,6 @@
         <div class="pager-row" id="pagerRow"></div>
       </section>
     </main>
-
-    <footer class="site-footer">
-      <div class="footer-social" aria-label="Navigation rapide">
-        <a href="/" aria-label="Accueil"><i class="las la-home"></i></a>
-        <a href="/articles" aria-label="Articles"><i class="las la-book-open"></i></a>
-        <a href="/sondage" aria-label="Sondage"><i class="las la-poll"></i></a>
-      </div>
-      <p>Vermor Club magazine</p>
-    </footer>
 
     <script>
       const listEl = document.getElementById('publicArticles');

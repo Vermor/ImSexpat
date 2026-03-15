@@ -6,15 +6,13 @@
     <script defer src="https://cloud.umami.is/script.js" data-website-id="6bc3b940-4007-4983-97d0-43c720a5ccc1"></script>
     <link rel="icon" type="image/png" href="/favicon.png" />
     <title>Admin Login | Vermor Club</title>
-    <link rel="stylesheet" href="/theme/line-awesome.min.css" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body class="auth-body page-login">
+  <body class="auth-body">
     <main class="auth-wrap">
       <section class="auth-card">
-        <p class="kicker">Administration</p>
         <h1>Acces admin</h1>
-        <p>Entre le mot de passe admin pour acceder au back office revue avec le nouveau front.</p>
+        <p>Entre le mot de passe admin.</p>
         <p id="error" class="error" hidden>Mot de passe incorrect.</p>
         <form method="post" action="/admin/login" class="auth-form">
           <input type="password" name="password" placeholder="Mot de passe" required />

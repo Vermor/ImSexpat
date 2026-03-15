@@ -35,9 +35,6 @@ const app = express();
 const port = process.env.PORT || 3000;
 const isProd = process.env.NODE_ENV === 'production';
 const primaryDomain = process.env.PRIMARY_DOMAIN || 'vermor.club';
-const canonicalRedirectEnabled = !['0', 'false', 'no', 'off'].includes(
-  String(process.env.CANONICAL_REDIRECT_ENABLED || 'true').trim().toLowerCase()
-);
 
 const uploadsDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -126,7 +123,7 @@ app.use((req, res, next) => {
   const host = (req.headers.host || '').toLowerCase();
   const targetHost = primaryDomain.toLowerCase();
 
-  if (isProd && canonicalRedirectEnabled && host.endsWith('up.railway.app') && targetHost) {
+  if (isProd && host.endsWith('up.railway.app') && targetHost) {
     return res.redirect(301, `https://${targetHost}${req.originalUrl}`);
   }
 

@@ -5,4 +5,3 @@ public/uploads/*
 !public/uploads/.gitkeep
 tmp-*.html
 tmp-*.png
-template-blog/
