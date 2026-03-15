@@ -7,17 +7,35 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <title>Admin Media | Vermor Club</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/dropzone@6.0.0-beta.2/dist/dropzone.css" />
+    <link rel="stylesheet" href="/theme/line-awesome.min.css" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body class="admin-body">
+  <body class="admin-body page-admin">
     <header class="site-header">
-      <div class="brand">VERMOR CLUB MEDIA</div>
+      <div class="header-social" aria-label="Raccourcis admin">
+        <a href="/admin" aria-label="Dashboard"><i class="las la-columns"></i></a>
+        <a href="/admin/articles" aria-label="Articles"><i class="las la-pen-nib"></i></a>
+        <a href="/admin/media" aria-label="Media"><i class="las la-photo-video"></i></a>
+      </div>
+      <a class="brand" href="/admin">VERMOR CLUB MEDIA</a>
+      <nav class="site-nav" aria-label="Navigation admin">
+        <a class="nav-link" href="/admin">Dashboard</a>
+        <a class="nav-link" href="/admin/landing">Landing</a>
+        <a class="nav-link" href="/admin/articles">Articles</a>
+        <a class="nav-link" href="/admin/media">Media</a>
+      </nav>
       <form method="post" action="/admin/logout">
         <button class="btn btn-ghost" type="submit">Se deconnecter</button>
       </form>
     </header>
 
     <main class="admin-main">
+      <section class="page-hero">
+        <p class="kicker">Bibliotheque</p>
+        <h1>Media manager</h1>
+        <p class="subtitle">Uploadez, reutilisez et nettoyez les visuels du site depuis la meme direction artistique.</p>
+      </section>
+
       <section class="admin-panel admin-panel-wide">
         <h1>Bibliotheque Media</h1>
         <p>Upload, consultation et reutilisation des images.</p>
